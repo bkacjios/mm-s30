@@ -1,6 +1,15 @@
 #include "ultra64.h"
 
 void osSetThreadPri(OSThread* thread, OSPri p) {
+#ifdef LINUX
+    // No libultra scheduler on Linux: just record it
+    if (thread == NULL) {
+        thread = __osRunningThread;
+    }
+    if (thread != NULL) {
+        thread->priority = p;
+    }
+#else
     register u32 saveMask = __osDisableInt();
 
     if (thread == NULL) {
@@ -22,4 +31,5 @@ void osSetThreadPri(OSThread* thread, OSPri p) {
     }
 
     __osRestoreInt(saveMask);
+#endif
 }

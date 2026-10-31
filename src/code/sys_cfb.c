@@ -135,9 +135,21 @@ void* SysCfb_GetWorkBuffer(void) {
     return gWorkBuffer;
 }
 
+#ifdef LINUX
+#include "s30_platform.h"
+#endif
+
 u16 SysCfb_GetZBufferPixel(s32 x, s32 y) {
     u16* zBuff = SysCfb_GetZBuffer();
     u16 val;
+
+#ifdef LINUX
+    // The z-buffer is on the GPU (this one is never drawn into): tell
+    // "nothing drawn here" (the cleared, maximum depth) from the rest
+    (void)zBuff;
+    (void)val;
+    return S30Gfx_DepthVisible(x, y, 1.0f) ? GPACK_ZDZ(G_MAXFBZ, 0) : 0;
+#endif
 
     if (zBuff != NULL) {
         val = (&zBuff[x])[y * gCfbWidth];

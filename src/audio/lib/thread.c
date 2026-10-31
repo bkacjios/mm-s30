@@ -5,6 +5,11 @@
  */
 #include "global.h"
 #include "audio/effects.h"
+#ifdef LINUX
+#include <stdlib.h>
+#include "s30_audio.h"
+#include <stdio.h>
+#endif
 
 AudioTask* AudioThread_UpdateImpl(void);
 void AudioThread_SetFadeOutTimer(s32 seqPlayerIndex, s32 fadeTimer);
@@ -53,9 +58,16 @@ AudioTask* AudioThread_UpdateImpl(void) {
     gAudioCtx.curAiBufferIndex %= 3;
     index = (gAudioCtx.curAiBufferIndex + 1) % 3;
 
+#ifdef LINUX
+    // ALSA's queue level stands in for the N64 AI length register; the buffer
+    // is written to ALSA after synthesis below (as in ports/oot)
+    numSamplesRemainingInAi = S30Audio_QueuedFrames();
+#else
     // Division converts size to numSamples: 2 channels (left/right) * 2 bytes per sample
     numSamplesRemainingInAi = osAiGetLength() / (2 * SAMPLE_SIZE);
+#endif
 
+#ifndef LINUX
     if (gAudioCtx.resetTimer < 16) {
         if (gAudioCtx.numSamplesPerFrame[index] != 0) {
             osAiSetNextBuffer(gAudioCtx.aiBuffers[index], 2 * gAudioCtx.numSamplesPerFrame[index] * (s32)SAMPLE_SIZE);
@@ -63,6 +75,7 @@ AudioTask* AudioThread_UpdateImpl(void) {
             if (gAudioCtx.numSamplesPerFrame[index]) {}
         }
     }
+#endif
 
     if (gAudioCustomUpdateFunction != NULL) {
         gAudioCustomUpdateFunction();
@@ -151,6 +164,49 @@ AudioTask* AudioThread_UpdateImpl(void) {
 
     gAudioCtx.curAbiCmdBuf =
         AudioSynth_Update(gAudioCtx.curAbiCmdBuf, &numAbiCmds, curAiBuffer, gAudioCtx.numSamplesPerFrame[index]);
+#ifdef LINUX
+    S30Audio_PlayInterleaved(curAiBuffer, gAudioCtx.numSamplesPerFrame[index]);
+    {
+        // MM_AUDIODUMP: the first minute of output to /tmp/mm_audio.raw (s16 stereo, 32 kHz)
+        static FILE* sDump;
+        static s32 sDumpInit;
+        static u32 sDumpFrames;
+
+        if (!sDumpInit) {
+            sDumpInit = true;
+            if (getenv("MM_AUDIODUMP") != NULL) {
+                sDump = fopen("/tmp/mm_audio.raw", "wb");
+            }
+        }
+        if (sDump != NULL && sDumpFrames < 60 * 32000) {
+            fwrite(curAiBuffer, 4, gAudioCtx.numSamplesPerFrame[index], sDump);
+            fflush(sDump);
+            sDumpFrames += gAudioCtx.numSamplesPerFrame[index];
+        }
+    }
+    {
+        // MM_AUDIODBG: every 32 frames, the output level and what is playing
+        static s32 sDbg = -1;
+        static u32 sFrames;
+        s32 n = gAudioCtx.numSamplesPerFrame[index];
+        s32 peak = 0, active = 0, k;
+
+        if (sDbg < 0) {
+            sDbg = getenv("MM_AUDIODBG") != NULL;
+        }
+        if (sDbg && (sFrames++ % 32) == 0) {
+            for (k = 0; k < 2 * n; k++) {
+                s32 v = curAiBuffer[k] < 0 ? -curAiBuffer[k] : curAiBuffer[k];
+                peak = v > peak ? v : peak;
+            }
+            for (k = 0; k < gAudioCtx.numNotes; k++) {
+                active += gAudioCtx.notes[k].sampleState.bitField0.enabled;
+            }
+            osSyncPrintf("audio: frame %u samples %d peak %d notes %d/%d seqPlayer0 %d queued %u\n", sFrames, n,
+                         peak, active, gAudioCtx.numNotes, gAudioCtx.seqPlayers[0].enabled, S30Audio_QueuedFrames());
+        }
+    }
+#endif
 
     // Update audioRandom to the next random number
     gAudioCtx.audioRandom = (gAudioCtx.audioRandom + gAudioCtx.totalTaskCount) * osGetCount();
@@ -410,13 +466,23 @@ void AudioThread_QueueCmdS32(u32 opArgs, s32 data) {
 }
 
 void AudioThread_QueueCmdS8(u32 opArgs, s8 data) {
+#ifdef LINUX
+    // Read back as the word's first byte: the low one on little-endian
+    u32 uData = (u32)(u8)data;
+#else
     u32 uData = data << 0x18;
+#endif
 
     AudioThread_QueueCmd(opArgs, (void**)&uData);
 }
 
 void AudioThread_QueueCmdU16(u32 opArgs, u16 data) {
+#ifdef LINUX
+    // Read back as the word's first halfword: the low one on little-endian
+    u32 uData = (u32)data;
+#else
     u32 uData = data << 0x10;
+#endif
 
     AudioThread_QueueCmd(opArgs, (void**)&uData);
 }

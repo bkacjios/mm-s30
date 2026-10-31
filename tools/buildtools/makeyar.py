@@ -44,8 +44,13 @@ from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 
 
+# Header word byte order: ">" for the N64, "<" for little-endian ports (the
+# game reads the header as native u32s through DMA)
+WORD_ORDER = ">"
+
+
 def write_word_as_bytes(buff: bytearray, offset: int, word: int):
-    struct.pack_into(f">I", buff, offset, word)
+    struct.pack_into(f"{WORD_ORDER}I", buff, offset, word)
 
 
 @dataclasses.dataclass
@@ -144,8 +149,12 @@ def main():
         "out_bin", help="Output path for the generated compressed yar binary"
     )
     parser.add_argument("out_sym", help="Output path for the generated syms elf file")
+    parser.add_argument("--little-endian", action="store_true",
+                        help="Write the archive header little-endian (PocketGo S30 port)")
 
     args = parser.parse_args()
+    global WORD_ORDER
+    WORD_ORDER = "<" if args.little_endian else ">"
 
     in_path = Path(args.in_file)
     out_bin_path = Path(args.out_bin)

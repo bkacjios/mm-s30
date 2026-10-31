@@ -43,6 +43,13 @@ struct PadMgr gPadMgr;
 #include "z64nmi_buff.h"
 #include "z64thread.h"
 
+#ifdef LINUX
+// The system heap: on the N64 it runs from the end of the buffers segment to
+// the framebuffers (about 5 MiB with the Expansion Pak); here it is just
+// memory
+static u8 sSystemHeap[16 * 1024 * 1024] ALIGNED(16);
+#endif
+
 s32 gScreenWidth = SCREEN_WIDTH;
 s32 gScreenHeight = SCREEN_HEIGHT;
 size_t gSystemHeapSize = 0;
@@ -63,9 +70,15 @@ void Main(void* arg) {
     Check_RegionIsSupported();
     Check_ExpansionPak();
 
+#ifdef LINUX
+    sysHeap = (uintptr_t)sSystemHeap;
+    gSystemHeapSize = sizeof(sSystemHeap);
+    (void)fb;
+#else
     sysHeap = (uintptr_t)SEGMENT_END(buffers);
     fb = FRAMEBUFFERS_START_ADDR;
     gSystemHeapSize = fb - sysHeap;
+#endif
     PRINTF(T("システムヒープ初期化 %08x-%08x %08x\n", "System heap initialization %08x-%08x %08x\n"), systemHeapStart,
            fb, sysHeap);
     SystemHeap_Init((void*)sysHeap, gSystemHeapSize);
@@ -101,7 +114,14 @@ void Main(void* arg) {
     osCreateThread(&gGraphThread, Z_THREAD_ID_GRAPH, Graph_ThreadEntry, arg, STACK_TOP(sGraphStack), Z_PRIORITY_GRAPH);
     osStartThread(&gGraphThread);
 
+#ifdef LINUX
+    // libultra threads don't run on Linux (osStartThread starts nothing) and
+    // no IRQ manager sends messages: the game runs here (as in ports/oot)
+    Graph_ThreadEntry(arg);
+    exit = true;
+#else
     exit = false;
+#endif
 
     while (!exit) {
         msg = NULL;

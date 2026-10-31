@@ -7,7 +7,12 @@
 
 // This value is hardcoded to be the size of ovl_Arrow_Fire which currently is the biggest actor that uses the AM_FIELD.
 DECLARE_OVERLAY_SEGMENT(Arrow_Fire)
+#ifdef LINUX
+// Actors are linked in: nothing is loaded into the field area
+#define AM_FIELD_SIZE 0
+#else
 #define AM_FIELD_SIZE SEGMENT_SIZE(ovl_Arrow_Fire)
+#endif
 
 struct ActorProfile;
 

@@ -141,7 +141,9 @@ void AudioMgr_ThreadEntry(void* arg) {
 }
 
 void AudioMgr_Unlock(AudioMgr* audioMgr) {
+#ifndef LINUX // initialised in AudioMgr_Init: nothing to wait for
     osRecvMesg(&audioMgr->lockQueue, NULL, OS_MESG_BLOCK);
+#endif
 }
 
 void AudioMgr_Init(AudioMgr* audioMgr, void* stack, OSPri pri, OSId id, Scheduler* sched, IrqMgr* irqMgr) {
@@ -164,6 +166,14 @@ void AudioMgr_Init(AudioMgr* audioMgr, void* stack, OSPri pri, OSId id, Schedule
     osSendMesg(&audioMgr->cmdQueue, NULL, OS_MESG_BLOCK);
 #endif
 
+#ifdef LINUX
+    // libultra threads don't run: initialise here; the audio updates run on
+    // the port's ALSA thread (src/s30/audio.c), as in ports/oot
+    Audio_Init();
+    AudioLoad_SetDmaHandler(DmaMgr_AudioDmaHandler);
+    Audio_InitSound();
+    return;
+#endif
     osCreateThread(&audioMgr->thread, id, AudioMgr_ThreadEntry, audioMgr, stack, pri);
     osStartThread(&audioMgr->thread);
 }

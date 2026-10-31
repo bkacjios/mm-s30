@@ -7,7 +7,12 @@
 #include "z_title_setup.h"
 
 // Linker symbol declarations (used in the table below)
+#ifdef LINUX
+// Gamestates are linked in: no overlay segments
+#define DEFINE_GAMESTATE(_typeName, _enumName, segmentName)
+#else
 #define DEFINE_GAMESTATE(_typeName, _enumName, segmentName) DECLARE_OVERLAY_SEGMENT(segmentName)
+#endif
 #define DEFINE_GAMESTATE_INTERNAL(_typeName, _enumName)
 
 #include "tables/gamestate_table.h"
@@ -22,6 +27,10 @@
         0,    sizeof(typeName##State),                                                                    \
     },
 
+#ifdef LINUX
+// Every gamestate is internal (linked in)
+#define DEFINE_GAMESTATE(typeName, enumName, _segmentName) DEFINE_GAMESTATE_INTERNAL(typeName, enumName)
+#else
 #define DEFINE_GAMESTATE(typeName, _enumName, segmentName) \
     {                                                      \
         NULL,                                              \
@@ -36,6 +45,7 @@
         0,                                                 \
         sizeof(typeName##State),                           \
     },
+#endif
 
 GameStateOverlay gGameStateOverlayTable[GAMESTATE_ID_MAX] = {
 #include "tables/gamestate_table.h"

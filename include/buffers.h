@@ -52,7 +52,9 @@ extern BufferHigh gHiBuffer;
  */
 #define FRAMEBUFFERS_START_ADDR (PHYS_TO_K0(0x800000) - sizeof(BufferHigh))
 
+#ifndef LINUX // no N64 memory map on Linux (gHiBuffer is an ordinary global)
 static_assert(FRAMEBUFFERS_START_ADDR == 0x80780000, "The expected address of gHiBuffer shifted. Please update said address in buffers.h and in the spec file.");
+#endif
 #endif
 
 

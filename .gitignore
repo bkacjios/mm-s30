@@ -33,3 +33,9 @@ graphs/
 # If you want to use your own gitignore rules without modifying this file:
 # - use `git config core.excludesFile path/to/my_gitignore_file`
 # - or edit `.git/info/exclude`
+
+# PocketGo S30 build (Makefile.s30)
+build_assets/
+build_s30/
+majora
+/src/s30/vrom_table.h

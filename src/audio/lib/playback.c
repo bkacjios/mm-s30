@@ -194,9 +194,16 @@ void AudioPlayback_ProcessNotes(void) {
         sampleState = &gAudioCtx.sampleStateList[gAudioCtx.sampleStateOffset + i];
         playbackState = &note->playbackState;
         if (playbackState->parentLayer != NO_LAYER) {
+#ifdef LINUX
+            // N64 RAM pointers are KSEG0 (0x80000000 and up); the S30's are not
+            if ((uintptr_t)playbackState->parentLayer < 0x10000) {
+                continue;
+            }
+#else
             if ((u32)playbackState->parentLayer < 0x7FFFFFFF) {
                 continue;
             }
+#endif
 
             if ((note != playbackState->parentLayer->note) && (playbackState->status == PLAYBACK_STATUS_0)) {
                 playbackState->adsr.action.s.release = true;

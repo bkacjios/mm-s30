@@ -28,7 +28,11 @@ typedef struct {
 // only use when necessary for alignment purposes
 typedef union Color_RGBA8_u32 {
     struct {
+#ifdef LINUX
+        u8 a, b, g, r; // little-endian memory order of 0xRRGGBBAA
+#else
         u8 r, g, b, a;
+#endif
     };
     u32 rgba;
 } Color_RGBA8_u32;
@@ -41,32 +45,56 @@ typedef struct {
     u32 r, g, b, a;
 } Color_RGBAu32;
 
+// Little-endian GCC allocates bitfields from the low bit: the fields are
+// listed in reverse so rgba keeps the N64 layout (0bRRRRRGGGGGBBBBBA)
 typedef union {
     struct {
+#ifdef LINUX
+        u16 a : 1;
+        u16 b : 5;
+        u16 g : 5;
+        u16 r : 5;
+#else
         u16 r : 5;
         u16 g : 5;
         u16 b : 5;
         u16 a : 1;
+#endif
     };
     u16 rgba;
 } Color_RGBA16;
 
 typedef union {
     struct {
+#ifdef LINUX
+        u32 a : 1;
+        u32 b : 5;
+        u32 g : 5;
+        u32 r : 5;
+#else
         u32 r : 5;
         u32 g : 5;
         u32 b : 5;
         u32 a : 1;
+#endif
     };
     u16 rgba;
 } Color_RGBA16_2;
 
 typedef union{
     struct {
+#ifdef LINUX
+        u32 : 2; // rgba bits 1-0 (the fields fill bits 15-2 on the N64)
+        u32 a : 5;
+        u32 b : 3;
+        u32 g : 3;
+        u32 r : 3;
+#else
         u32 r : 3;
         u32 g : 3;
         u32 b : 3;
         u32 a : 5;
+#endif
     };
     u16 rgba;
 } Color_RGBA14;

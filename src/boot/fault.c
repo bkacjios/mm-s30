@@ -1126,6 +1126,13 @@ NORETURN void Fault_AddHungupAndCrashImpl(const char* exp1, const char* exp2) {
     s32 pad;
 
     Fault_AddClient(&client, (void*)Fault_HangupFaultClient, (void*)exp1, (void*)exp2);
+#ifdef LINUX
+    // 0x11111111 can be mapped in a Linux process (the store then succeeds
+    // and execution runs off the end): log the messages and fault on NULL,
+    // where the port's crash handler (src/s30/main.c) logs the stack
+    osSyncPrintf("HungUp: %s / %s\n", exp1 != NULL ? exp1 : "(NULL)", exp2 != NULL ? exp2 : "(NULL)");
+    *(volatile u32*)NULL = 0;
+#endif
     *(u32*)0x11111111 = 0; // trigger an exception via unaligned memory access
 
     // Since the above line triggers an exception and transfers execution to the fault handler

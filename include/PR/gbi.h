@@ -1064,6 +1064,17 @@ typedef struct {
     unsigned char v[3];
 } Tri;
 
+#ifdef LINUX
+/*
+ * 4x4 matrix as plain floats: the port's renderer takes them as they are
+ * (src/linux/mgu.c: guMtxF2L/guMtxL2F are copies), as in ports/oot
+ */
+typedef f32 __attribute__((aligned(32))) Mtx_t[4][4];
+typedef union __attribute__((aligned(32))) {
+    Mtx_t   m;
+    long long int force_structure_alignment;
+} Mtx;
+#else
 /*
  * 4x4 matrix, fixed point s15.16 format.
  * First 8 words are integer portion of the 4x4 matrix
@@ -1078,10 +1089,25 @@ typedef union {
     };
     long long int force_structure_alignment;
 } Mtx;
+#endif
 
 #define IPART(x) (((s32)((x) * 0x10000) >> 16) & 0xFFFF)
 #define FPART(x)  ((s32)((x) * 0x10000) & 0xFFFF)
 
+#ifdef LINUX
+/* Float Mtx (see the typedef): the values as they are, in the N64 layout */
+#define gdSPDefMtx( \
+        xx, xy, xz, xw, \
+        yx, yy, yz, yw, \
+        zx, zy, zz, zw, \
+        wx, wy, wz, ww) \
+    { { \
+        { xx, yx, zx, wx }, \
+        { xy, yy, zy, wy }, \
+        { xz, yz, zz, wz }, \
+        { xw, yw, zw, ww }, \
+    } }
+#else
 #define gdSPDefMtx( \
         xx, xy, xz, xw, \
         yx, yy, yz, yw, \
@@ -1105,6 +1131,7 @@ typedef union {
         (FPART(xw) << 16) | FPART(yw), \
         (FPART(zw) << 16) | FPART(ww), \
     } }
+#endif
 
 /*
  * Viewport

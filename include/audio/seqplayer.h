@@ -169,6 +169,25 @@ typedef struct SequenceLayer {
     /* 0x09 */ u8 targetReverbVol;
     union {
         struct {
+#ifdef LINUX
+            // Little-endian: bitfields pack from LSB
+            /* 0x0A */ u16 bit_F : 1;
+            /* 0x0A */ u16 bit_E : 1;
+            /* 0x0A */ u16 bit_D : 1;
+            /* 0x0A */ u16 bit_C : 1;
+            /* 0x0A */ u16 bit_B : 1;
+            /* 0x0A */ u16 bit_A : 1;
+            /* 0x0A */ u16 bit_9 : 1;
+            /* 0x0A */ u16 bit_8 : 1;
+            /* 0x0A */ u16 bit_7 : 1;
+            /* 0x0A */ u16 bit_6 : 1;
+            /* 0x0A */ u16 bit_5 : 1;
+            /* 0x0A */ u16 bit_4 : 1;
+            /* 0x0A */ u16 useVibrato : 1;
+            /* 0x0A */ u16 bit_2 : 1;
+            /* 0x0A */ u16 bit_1 : 1;
+            /* 0x0A */ u16 bit_0 : 1;
+#else
             /* 0x0A */ u16 bit_0 : 1;
             /* 0x0A */ u16 bit_1 : 1;
             /* 0x0A */ u16 bit_2 : 1;
@@ -185,6 +204,7 @@ typedef struct SequenceLayer {
             /* 0x0A */ u16 bit_D : 1;
             /* 0x0A */ u16 bit_E : 1;
             /* 0x0A */ u16 bit_F : 1;
+#endif
         } s;
         /* 0x0A */ u16 asByte;
     } unk_0A;

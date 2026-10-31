@@ -140,6 +140,19 @@ void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 arg2, u8* dmaI
     s32 bufferPos;
     u32 i;
 
+#ifdef LINUX
+    {
+        // All of the audio ROM is resident in RAM (AudioRom_LoadAll): point at it directly instead of
+        // copying through the sample DMA buffers (as in ports/oot)
+        extern void* AudioRom_GetDirectPointer(u32 devAddr, u32 size);
+        void* ptr = AudioRom_GetDirectPointer(devAddr, size);
+
+        if (ptr != NULL) {
+            return ptr;
+        }
+    }
+#endif
+
     if (arg2 || (*dmaIndexRef >= gAudioCtx.sampleDmaListSize1)) {
         for (i = gAudioCtx.sampleDmaListSize1; i < gAudioCtx.sampleDmaCount; i++) {
             dma = &gAudioCtx.sampleDmas[i];
@@ -878,6 +891,81 @@ AudioTable* AudioLoad_GetLoadTable(s32 tableType) {
  * @param fontDataStartAddr ram address of raw soundfont binary loaded into cache
  * @param sampleBankReloc information on the sampleBank containing raw audio samples
  */
+#ifdef LINUX
+/*
+ * Soundfont data is big-endian, as loaded from the ROM. Each structure is
+ * swapped to the host byte order once, when the font is relocated (as in
+ * ports/oot). Samples, ADPCM loops and books can be shared between drums,
+ * instruments and sound effects (and fonts), so those are tracked: a second
+ * swap would undo the first.
+ */
+#define BSWAP16(x) __builtin_bswap16(x)
+#define BSWAP32(x) __builtin_bswap32(x)
+
+static void AudioLoad_ByteSwapTunedSample(TunedSample* tunedSample) {
+    u32* raw = (u32*)tunedSample;
+
+    raw[0] = BSWAP32(raw[0]); // sample offset
+    raw[1] = BSWAP32(raw[1]); // tuning (f32)
+}
+
+static void AudioLoad_ByteSwapSample(Sample* sample) {
+    u32* raw = (u32*)sample;
+
+    raw[0] = BSWAP32(raw[0]); // codec, medium, flags, size
+    raw[1] = BSWAP32(raw[1]); // sampleAddr
+    raw[2] = BSWAP32(raw[2]); // loop
+    raw[3] = BSWAP32(raw[3]); // book
+}
+
+static void AudioLoad_ByteSwapAdpcmLoop(AdpcmLoop* loop) {
+    s32 i;
+
+    loop->header.start = BSWAP32(loop->header.start);
+    loop->header.loopEnd = BSWAP32(loop->header.loopEnd);
+    loop->header.count = BSWAP32(loop->header.count);
+    loop->header.sampleEnd = BSWAP32(loop->header.sampleEnd);
+    if (loop->header.count != 0) {
+        for (i = 0; i < 16; i++) {
+            loop->predictorState[i] = (s16)BSWAP16((u16)loop->predictorState[i]);
+        }
+    }
+}
+
+static void AudioLoad_ByteSwapAdpcmBook(AdpcmBook* book) {
+    s32 i;
+    s32 numEntries;
+
+    book->header.order = BSWAP32(book->header.order);
+    book->header.numPredictors = BSWAP32(book->header.numPredictors);
+    numEntries = 8 * book->header.order * book->header.numPredictors;
+    for (i = 0; i < numEntries; i++) {
+        book->codeBook[i] = (s16)BSWAP16((u16)book->codeBook[i]);
+    }
+}
+
+#define MAX_SWAPPED 2048
+static void* sSwapped[MAX_SWAPPED];
+static s32 sNumSwapped;
+
+/* Whether ptr was swapped already; marks it swapped */
+static s32 AudioLoad_AlreadySwapped(void* ptr) {
+    s32 i;
+
+    for (i = 0; i < sNumSwapped; i++) {
+        if (sSwapped[i] == ptr) {
+            return true;
+        }
+    }
+    if (sNumSwapped < MAX_SWAPPED) {
+        sSwapped[sNumSwapped++] = ptr;
+    } else {
+        osSyncPrintf("audio: swap tracking full, shared samples will corrupt\n");
+    }
+    return false;
+}
+#endif
+
 void AudioLoad_RelocateFont(s32 fontId, SoundFontData* fontDataStartAddr, SampleBankRelocInfo* sampleBankReloc) {
     void* soundOffset;
     uintptr_t soundListOffset;
@@ -893,6 +981,15 @@ void AudioLoad_RelocateFont(s32 fontId, SoundFontData* fontDataStartAddr, Sample
     // Relocate an offset (relative to the start of the font data) to a pointer (a ram address)
 #define RELOC_TO_RAM(x) (void*)((uintptr_t)(x) + (uintptr_t)(fontDataStartAddr))
 
+#ifdef LINUX
+    // Restart the tracking: a font is loaded into fresh memory
+    sNumSwapped = 0;
+    // The top-level offsets: drum list, sound effects, instruments
+    for (i = 0; i < 2 + numInstruments && i < 2 + 126; i++) {
+        fontData[i] = BSWAP32(fontData[i]);
+    }
+#endif
+
     // Drums relocation
 
     // The first u32 in fontData is an offset to a list of offsets to the drums
@@ -902,6 +999,11 @@ void AudioLoad_RelocateFont(s32 fontId, SoundFontData* fontDataStartAddr, Sample
     if ((soundListOffset != 0) && (numDrums != 0)) {
 
         fontData[0] = (uintptr_t)RELOC_TO_RAM(soundListOffset);
+#ifdef LINUX
+        for (i = 0; i < numDrums; i++) {
+            ((u32*)fontData[0])[i] = BSWAP32(((u32*)fontData[0])[i]);
+        }
+#endif
 
         // Loop through the drum offsets
         for (i = 0; i < numDrums; i++) {
@@ -919,6 +1021,10 @@ void AudioLoad_RelocateFont(s32 fontId, SoundFontData* fontDataStartAddr, Sample
             if (drum->isRelocated) {
                 continue;
             }
+#ifdef LINUX
+            AudioLoad_ByteSwapTunedSample(&drum->tunedSample);
+            *(u32*)&drum->envelope = BSWAP32(*(u32*)&drum->envelope);
+#endif
 
             AudioLoad_RelocateSample(&drum->tunedSample, fontDataStartAddr, sampleBankReloc);
 
@@ -949,6 +1055,9 @@ void AudioLoad_RelocateFont(s32 fontId, SoundFontData* fontDataStartAddr, Sample
             if ((soundEffect == NULL) || (soundEffect->tunedSample.sample == NULL)) {
                 continue;
             }
+#ifdef LINUX
+            AudioLoad_ByteSwapTunedSample(&soundEffect->tunedSample);
+#endif
 
             AudioLoad_RelocateSample(&soundEffect->tunedSample, fontDataStartAddr, sampleBankReloc);
         }
@@ -972,6 +1081,16 @@ void AudioLoad_RelocateFont(s32 fontId, SoundFontData* fontDataStartAddr, Sample
 
             // The instrument may be in the list multiple times and already relocated
             if (!inst->isRelocated) {
+#ifdef LINUX
+                *(u32*)&inst->envelope = BSWAP32(*(u32*)&inst->envelope);
+                if (inst->normalRangeLo != 0) {
+                    AudioLoad_ByteSwapTunedSample(&inst->lowPitchTunedSample);
+                }
+                AudioLoad_ByteSwapTunedSample(&inst->normalPitchTunedSample);
+                if (inst->normalRangeHi != 0x7F) {
+                    AudioLoad_ByteSwapTunedSample(&inst->highPitchTunedSample);
+                }
+#endif
                 // Some instruments have a different sample for low pitches
                 if (inst->normalRangeLo != 0) {
                     AudioLoad_RelocateSample(&inst->lowPitchTunedSample, fontDataStartAddr, sampleBankReloc);
@@ -1786,12 +1905,25 @@ void AudioLoad_RelocateSample(TunedSample* tunedSample, SoundFontData* fontData,
     if ((uintptr_t)tunedSample->sample <= AUDIO_RELOCATED_ADDRESS_START) {
 
         sample = tunedSample->sample = AUDIO_RELOC(tunedSample->sample, fontData);
+#ifdef LINUX
+        if (!AudioLoad_AlreadySwapped(sample)) {
+            AudioLoad_ByteSwapSample(sample);
+        }
+#endif
 
         // If the sample exists and has not already been relocated
         // Note: this is important, as the same sample can be used by different drums, sound effects, instruments
         if ((sample->size != 0) && (sample->isRelocated != true)) {
             sample->loop = AUDIO_RELOC(sample->loop, fontData);
             sample->book = AUDIO_RELOC(sample->book, fontData);
+#ifdef LINUX
+            if (!AudioLoad_AlreadySwapped(sample->loop)) {
+                AudioLoad_ByteSwapAdpcmLoop(sample->loop);
+            }
+            if (!AudioLoad_AlreadySwapped(sample->book)) {
+                AudioLoad_ByteSwapAdpcmBook(sample->book);
+            }
+#endif
 
             // Resolve the sample medium 2-bit bitfield into a real value based on sampleBankReloc.
             // Then relocate the offset sample within the sampleBank (not the fontData) into absolute address.

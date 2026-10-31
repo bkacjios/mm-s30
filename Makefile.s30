@@ -1,0 +1,95 @@
+# Makefile.s30 - Majora's Mask for the PocketGo S30 (Allwinner A33, ARMv7
+# hard-float, Alpine musl, GLES2 on KMS/EGL, ALSA, evdev). Same layout as
+# ports/oot's Makefile.s30.
+#
+#   make -f Makefile.s30 assets     # asset segments for ARM -> data/*.bin (host)
+#   make -f Makefile.s30 -k objs    # compile the game code (bring-up)
+#
+# WORK is the pocketgo-s30 build tree (sysroot + armv7-clang wrapper).
+
+WORK ?= ../../s30-build
+SYSROOT := $(abspath $(WORK)/sysroot)
+VERSION ?= n64-us
+
+# Compile with GCC (the game needs -fno-toplevel-reorder, which clang lacks)
+# against the device's musl headers; link with the project's clang/lld wrapper
+CC := arm-none-eabi-gcc
+LINK := $(WORK)/bin/armv7-clang
+
+TARGET_FLAGS := -marm -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 \
+    -mfloat-abi=hard -fno-short-enums -isystem $(SYSROOT)/usr/include
+
+CFLAGS := $(TARGET_FLAGS) -O2 -Wall -std=gnu23 -DLINUX -D_LANGUAGE_C -D_GNU_SOURCE \
+    -DNON_MATCHING -DAVOID_UB -DMM_VERSION=N64_US \
+    -DF3DEX_GBI_2 -DF3DEX_GBI_PL -DGBI_DOWHILE \
+    -Wno-incompatible-pointer-types -Wno-int-conversion \
+    -g -fno-toplevel-reorder -fwrapv -fno-strict-aliasing -funsigned-char -MMD -MP \
+    -include include/s30/s30_libc_compat.h \
+    -Iinclude -Iinclude/s30 -Isrc -I. -Iextracted/$(VERSION) -Ibuild/$(VERSION)
+
+BUILD_DIR := build_s30
+
+# The game's C files for this version: the spec's src/ objects that have a
+# .c (the rest are MIPS assembly or the N64 ROM header/IPL)
+SPEC_O := $(shell cpp -P -DMM_VERSION=$(shell echo $(VERSION) | tr a-z- A-Z_) -I. spec/spec | \
+    sed -n -E 's/^[ \t]*include[ \t]*"\$$\(BUILD_DIR\)\/(src\/[a-zA-Z0-9\/_.-]+)\.o"/\1/p')
+# Replaced on Linux by src/linux/reimpl.c (boot, VI, cartridge, ROM DMA, debug print)
+# (src/boot/boot_main.c is the N64 entry point; src/s30/main.c calls Main)
+REPLACED := src/boot/boot_main.c src/boot/build.c src/boot/carthandle.c src/boot/idle.c \
+    src/boot/viconfig.c src/boot/z_std_dma.c src/boot/syncprintf.c
+# The C library functions MM implements itself: musl's are used instead (the
+# game's would replace them for the whole process, Mesa and ALSA included)
+REPLACED += src/libultra/libc/string.c src/boot/libc/memmove.c src/boot/libc/memset.c \
+    src/boot/libc/strcmp.c src/boot/libc/strcpy.c src/boot/libc64/sprintf.c
+SRCS := $(filter-out src/makerom/% $(REPLACED),$(wildcard $(addsuffix .c,$(SPEC_O))))
+OBJS := $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(SRCS))
+
+# The port's own code: OS services on Linux (reimpl.c) and the platform layer
+PORT_OBJS := $(BUILD_DIR)/src/linux/reimpl.o $(BUILD_DIR)/src/linux/mgu.o $(BUILD_DIR)/src/audio/lib/mixer.o \
+    $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(wildcard src/s30/*.c))
+
+TARGET := majora
+LIBS := -lGLESv2 -lEGL -lgbm -ldrm -lasound -lpthread -lm
+# Asset symbol addresses (segment-relative), one definition each
+ASSET_SYMBOLS := -Wl,build_assets/assets/symbols.ld
+
+# Per-file defines (as in the decomp's Makefile)
+$(BUILD_DIR)/src/boot/build.o: CFLAGS += -DBUILD_CREATOR='"zelda@srd44"' \
+    -DBUILD_DATE='"00-07-31"' -DBUILD_TIME='"17:04:16"'
+$(BUILD_DIR)/src/audio/lib/seqplayer.o: CFLAGS += -DMML_VERSION=MML_VERSION_MM
+
+PYTHON ?= .venv/bin/python3
+
+all: $(TARGET)
+
+objs: $(OBJS)
+
+# Image base 0x40000000: code, data and the brk heap then sit above
+# 0x10000000, so a real pointer never looks like an N64 segmented address
+$(TARGET): $(OBJS) $(PORT_OBJS)
+	$(LINK) -no-pie -Wl,--image-base=0x40000000 -Wl,--error-limit=0 $^ -o $@ $(ASSET_SYMBOLS) $(LIBS)
+
+# Platform layer: system headers (EGL, DRM, ALSA) need a real Linux target,
+# so build it with the clang wrapper
+$(BUILD_DIR)/src/s30/%.o: src/s30/%.c
+	@mkdir -p $(dir $@)
+	$(LINK) $(filter-out -fno-toplevel-reorder -mfloat-abi=hard -fno-short-enums -isystem $(SYSROOT)/usr/include,$(CFLAGS)) \
+	    -I$(SYSROOT)/usr/include/libdrm -c $< -o $@
+
+assets:
+	S30_SYSROOT=$(SYSROOT) MM_VERSION=$(VERSION) $(PYTHON) pc_tools/make_assets.py
+
+$(BUILD_DIR)/src/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) -c $< -o $@ 2> $@.err || { echo "FAIL $<"; false; }
+	@rm -f $@.err
+
+clean:
+	rm -rf $(BUILD_DIR) $(TARGET)
+
+clean-assets:
+	rm -rf build_assets/assets data
+
+.PHONY: all objs assets clean clean-assets
+
+-include $(OBJS:.o=.d) $(PORT_OBJS:.o=.d)

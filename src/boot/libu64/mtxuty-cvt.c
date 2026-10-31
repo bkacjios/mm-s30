@@ -1,6 +1,10 @@
 #include "global.h"
 
 void MtxConv_F2L(Mtx* mtx, MtxF* mf) {
+#ifdef LINUX
+    // The port's Mtx is plain floats (include/PR/gbi.h)
+    guMtxF2L(mf->mf, mtx);
+#else
     s32 i;
     s32 j;
 
@@ -16,6 +20,7 @@ void MtxConv_F2L(Mtx* mtx, MtxF* mf) {
             mu->fracPart[i][j] = value;
         }
     }
+#endif
 }
 
 void MtxConv_L2F(MtxF* mtx, Mtx* mf) {

@@ -37,7 +37,14 @@ typedef enum {
 #define FILTER_BUF_PART1 (8 * SAMPLE_SIZE)
 #define FILTER_BUF_PART2 (8 * SAMPLE_SIZE)
 
+#ifdef LINUX
+// Font data pointers are relocated from font-relative offsets (< 1 MB) to RAM
+// addresses; on the S30 the image and heap sit at 0x40000000 and up (see
+// Makefile.s30), not in KSEG0 (as in ports/oot)
+#define AUDIO_RELOCATED_ADDRESS_START 0x10000000
+#else
 #define AUDIO_RELOCATED_ADDRESS_START K0BASE
+#endif
 
 // To be used with AudioThread_CountAndReleaseNotes()
 #define AUDIO_NOTE_RELEASE (1 << 0)
@@ -107,10 +114,18 @@ typedef struct {
     union {
     /* 0x0 */ u32 opArgs;
         struct {
+#ifdef LINUX
+            // Little-endian: opArgs is packed as op<<24 | arg0<<16 | arg1<<8 | arg2
+            /* 0x0 */ u8 arg2;
+            /* 0x1 */ u8 arg1;
+            /* 0x2 */ u8 arg0;
+            /* 0x3 */ u8 op;
+#else
             /* 0x0 */ u8 op;
             /* 0x1 */ u8 arg0;
             /* 0x2 */ u8 arg1;
             /* 0x3 */ u8 arg2;
+#endif
         };
     };
     union {

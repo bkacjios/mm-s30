@@ -1,5 +1,10 @@
 #include "global.h"
 #include "audio/synthesis.h"
+#ifdef LINUX
+#include <stdlib.h>
+// The audio commands run at once in the software mixer (no RSP), as in ports/oot
+#include "mixer.h"
+#endif
 
 // DMEM Addresses for the RSP
 #define DMEM_TEMP 0x3B0
@@ -354,9 +359,13 @@ void AudioSynth_Noop9(void) {
 }
 
 void AudioSynth_DMemMove(Acmd* cmd, s32 dmemIn, s32 dmemOut, size_t size) {
+#ifdef LINUX
+    aDMEMMoveImpl(dmemIn, dmemOut, size);
+#else
     // aDMEMMove(cmd, dmemIn, dmemOut, size);
     cmd->words.w0 = _SHIFTL(A_DMEMMOVE, 24, 8) | _SHIFTL(dmemIn, 0, 24);
     cmd->words.w1 = _SHIFTL(dmemOut, 16, 16) | _SHIFTL(size, 0, 16);
+#endif
 }
 
 void AudioSynth_Noop10(void) {
@@ -372,9 +381,13 @@ void AudioSynth_Noop13(void) {
 }
 
 void AudioSynth_InterL(Acmd* cmd, s32 dmemIn, s32 dmemOut, s32 numSamples) {
+#ifdef LINUX
+    aInterlImpl(dmemIn, dmemOut, numSamples);
+#else
     // aInterl(cmd, dmemIn, dmemOut, numSamples);
     cmd->words.w0 = _SHIFTL(A_INTERL, 24, 8) | _SHIFTL(numSamples, 0, 16);
     cmd->words.w1 = _SHIFTL(dmemIn, 16, 16) | _SHIFTL(dmemOut, 0, 16);
+#endif
 }
 
 void AudioSynth_EnvSetup1(Acmd* cmd, s32 reverbVol, s32 rampReverb, s32 rampLeft, s32 rampRight) {
@@ -393,9 +406,13 @@ void AudioSynth_SaveBuffer(Acmd* cmd, s32 dmemSrc, s32 size, void* addrDest) {
 }
 
 void AudioSynth_EnvSetup2(Acmd* cmd, s32 volLeft, s32 volRight) {
+#ifdef LINUX
+    aEnvSetup2Impl(volLeft, volRight);
+#else
     // aEnvSetup2(cmd, volLeft, volRight);
     cmd->words.w0 = _SHIFTL(A_ENVSETUP2, 24, 8);
     cmd->words.w1 = _SHIFTL(volLeft, 16, 16) | _SHIFTL(volRight, 0, 16);
+#endif
 }
 
 void AudioSynth_Noop15(void) {
@@ -412,15 +429,23 @@ void AudioSynth_S8Dec(Acmd* cmd, s32 flags, s16* state) {
 }
 
 void AudioSynth_HiLoGain(Acmd* cmd, s32 gain, s32 dmemIn, s32 dmemOut, s32 size) {
+#ifdef LINUX
+    aHiLoGainImpl(gain, size, dmemIn);
+#else
     // aHiLoGain(cmd, gain, size, dmemIn, dmemOut);
     cmd->words.w0 = _SHIFTL(A_HILOGAIN, 24, 8) | _SHIFTL(gain, 16, 8) | _SHIFTL(size, 0, 16);
     cmd->words.w1 = _SHIFTL(dmemIn, 16, 16) | _SHIFTL(dmemOut, 0, 16);
+#endif
 }
 
 // Remnant of OoT
 void AudioSynth_UnkCmd19(Acmd* cmd, s32 dmem1, s32 dmem2, s32 size, s32 arg4) {
+#ifdef LINUX
+    aUnkCmd19Impl(arg4, size, dmem1, dmem2);
+#else
     cmd->words.w0 = _SHIFTL(A_SPNOOP, 24, 8) | _SHIFTL(arg4, 16, 8) | _SHIFTL(size, 0, 16);
     cmd->words.w1 = _SHIFTL(dmem1, 16, 16) | _SHIFTL(dmem2, 0, 16);
+#endif
 }
 
 void AudioSynth_Noop18(void) {
@@ -1186,8 +1211,15 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
                     sampleDataChunkAlignPad = (u32)samplesToLoadAddr & 0xF;
                     sampleDataChunkSize = ALIGN16((numFramesToDecode * frameSize) + SAMPLES_PER_FRAME);
                     sampleDataDmemAddr = DMEM_COMPRESSED_ADPCM_DATA - sampleDataChunkSize;
+#ifdef LINUX
+                    // Decoded in place from RAM (no copy into DMEM)
+                    aLoadBufferImpl(samplesToLoadAddr - sampleDataChunkAlignPad, sampleDataDmemAddr,
+                                    sampleDataChunkSize, 0);
+                    cmd++;
+#else
                     aLoadBuffer(cmd++, samplesToLoadAddr - sampleDataChunkAlignPad, sampleDataDmemAddr,
                                 sampleDataChunkSize);
+#endif
                 } else {
                     numSamplesToDecode = 0;
                     sampleDataChunkAlignPad = 0;
@@ -1209,13 +1241,20 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
                     dmemUncompressedAddrOffset2 = ALIGN16(dmemUncompressedAddrOffset1 + 8 * SAMPLE_SIZE);
                 }
 
+#ifdef LINUX
+                // The decoders read the chunk in place in RAM (see aLoadBufferImpl above): their input is
+                // an offset from the chunk's start, not a DMEM address
+#define SAMPLE_DATA_IN(dmem) (sampleDataChunkAlignPad)
+#else
+#define SAMPLE_DATA_IN(dmem) ((dmem) + sampleDataChunkAlignPad)
+#endif
                 // Decompress the raw sample chunks in the rsp
                 // Goes from adpcm (compressed) sample data to pcm (uncompressed) sample data
                 switch (sample->codec) {
                     case CODEC_ADPCM:
                         sampleDataChunkSize = ALIGN16((numFramesToDecode * frameSize) + SAMPLES_PER_FRAME);
                         sampleDataDmemAddr = DMEM_COMPRESSED_ADPCM_DATA - sampleDataChunkSize;
-                        aSetBuffer(cmd++, 0, sampleDataDmemAddr + sampleDataChunkAlignPad,
+                        aSetBuffer(cmd++, 0, SAMPLE_DATA_IN(sampleDataDmemAddr),
                                    DMEM_UNCOMPRESSED_NOTE + dmemUncompressedAddrOffset2,
                                    numSamplesToDecode * SAMPLE_SIZE);
                         aADPCMdec(cmd++, flags, synthState->synthesisBuffers->adpcmState);
@@ -1224,7 +1263,7 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
                     case CODEC_SMALL_ADPCM:
                         sampleDataChunkSize = ALIGN16((numFramesToDecode * frameSize) + SAMPLES_PER_FRAME);
                         sampleDataDmemAddr = DMEM_COMPRESSED_ADPCM_DATA - sampleDataChunkSize;
-                        aSetBuffer(cmd++, 0, sampleDataDmemAddr + sampleDataChunkAlignPad,
+                        aSetBuffer(cmd++, 0, SAMPLE_DATA_IN(sampleDataDmemAddr),
                                    DMEM_UNCOMPRESSED_NOTE + dmemUncompressedAddrOffset2,
                                    numSamplesToDecode * SAMPLE_SIZE);
                         aADPCMdec(cmd++, flags | A_ADPCM_SHORT, synthState->synthesisBuffers->adpcmState);
@@ -1233,7 +1272,7 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
                     case CODEC_S8:
                         sampleDataChunkSize = ALIGN16((numFramesToDecode * frameSize) + SAMPLES_PER_FRAME);
                         sampleDataDmemAddr = DMEM_COMPRESSED_ADPCM_DATA - sampleDataChunkSize;
-                        AudioSynth_SetBuffer(cmd++, 0, sampleDataDmemAddr + sampleDataChunkAlignPad,
+                        AudioSynth_SetBuffer(cmd++, 0, SAMPLE_DATA_IN(sampleDataDmemAddr),
                                              DMEM_UNCOMPRESSED_NOTE + dmemUncompressedAddrOffset2,
                                              numSamplesToDecode * SAMPLE_SIZE);
                         AudioSynth_S8Dec(cmd++, flags, synthState->synthesisBuffers->adpcmState);
@@ -1396,6 +1435,10 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
     }
 
     // Determine the behavior of the audio processing that leads to the haas effect
+#ifdef LINUX
+    // No haas effect in the software mixer (as in ports/oot)
+    haasEffectDelaySide = HAAS_EFFECT_DELAY_NONE;
+#else
     if ((sampleState->haasEffectLeftDelaySize != 0) || (synthState->prevHaasEffectLeftDelaySize != 0)) {
         haasEffectDelaySide = HAAS_EFFECT_DELAY_LEFT;
     } else if ((sampleState->haasEffectRightDelaySize != 0) || (synthState->prevHaasEffectRightDelaySize != 0)) {
@@ -1403,6 +1446,7 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
     } else {
         haasEffectDelaySide = HAAS_EFFECT_DELAY_NONE;
     }
+#endif
 
     // Apply an unknown effect based on the surround sound-mode
     if (gAudioCtx.soundMode == SOUNDMODE_SURROUND) {
@@ -1420,6 +1464,7 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
                                      flags);
 
     // Apply the haas effect by delaying either the left or the right channel by a small amount
+#ifndef LINUX
     if (sampleState->bitField1.useHaasEffect) {
         if (!(flags & A_INIT)) {
             flags = A_CONTINUE;
@@ -1427,6 +1472,7 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
         cmd = AudioSynth_ApplyHaasEffect(cmd, sampleState, synthState, numSamplesPerUpdate * (s32)SAMPLE_SIZE, flags,
                                          haasEffectDelaySide);
     }
+#endif
 
     return cmd;
 }

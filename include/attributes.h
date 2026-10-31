@@ -11,7 +11,11 @@
 #define UNUSED       __attribute__((unused))
 #define FALLTHROUGH  __attribute__((fallthrough))
 #define NORETURN     __attribute__((noreturn))
+#ifdef LINUX
+#define NO_REORDER   __attribute__((no_reorder, used))
+#else
 #define NO_REORDER   __attribute__((no_reorder))
+#endif
 #define SECTION_DATA __attribute__((section(".data")))
 
 #ifdef __GNUC__

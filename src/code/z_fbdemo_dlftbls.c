@@ -4,9 +4,14 @@
 #include "z64lib.h"
 
 // Profile and Linker symbol declarations (used in the table below)
+#ifdef LINUX
+// Transitions are linked in: no overlay segments
+#define DEFINE_TRANSITION(_enumValue, structName, _instanceName, name) extern TransitionProfile structName##_Profile;
+#else
 #define DEFINE_TRANSITION(_enumValue, structName, _instanceName, name) \
     extern TransitionProfile structName##_Profile;                     \
     DECLARE_OVERLAY_SEGMENT(name)
+#endif
 
 #define DEFINE_TRANSITION_INTERNAL(_enumValue, structName, _instanceName) extern TransitionProfile structName##_Profile;
 
@@ -15,6 +20,11 @@
 #undef DEFINE_TRANSITION
 #undef DEFINE_TRANSITION_INTERNAL
 
+#ifdef LINUX
+// Every transition is internal (linked in)
+#define DEFINE_TRANSITION(_enumValue, structName, _instanceName, name) \
+    { { 0, 0 }, NULL, NULL, 0, 0, &structName##_Profile, sizeof(structName) },
+#else
 #define DEFINE_TRANSITION(_enumValue, structName, _instanceName, name) \
     {                                                                  \
         { 0, 0 },                                                      \
@@ -24,6 +34,7 @@
         &structName##_Profile,                                         \
         sizeof(structName),                                            \
     },
+#endif
 
 #define DEFINE_TRANSITION_INTERNAL(_enumValue, structName, _instanceName) \
     { { 0, 0 }, NULL, NULL, 0, 0, &structName##_Profile, sizeof(structName) },

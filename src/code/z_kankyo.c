@@ -529,10 +529,21 @@ void Environment_UpdateTimeBasedSequence(PlayState* play);
 u8 func_800FE5D0(struct PlayState* play);
 void Environment_JumpForwardInTime(void);
 
+#ifdef LINUX
+#include "s30_platform.h"
+#endif
+
 void Environment_GraphCallback(GraphicsContext* gfxCtx, void* arg) {
     PlayState* play = (PlayState*)arg;
 
+#ifdef LINUX
+    // The z-buffer is on the GPU: only "nothing drawn here" (the cleared,
+    // maximum depth) is told apart, which is all the sun test needs (as in
+    // ports/oot)
+    sSunScreenDepth = S30Gfx_DepthVisible(sSunDepthTestX, sSunDepthTestY, 1.0f) ? GPACK_ZDZ(G_MAXFBZ, 0) : 0;
+#else
     sSunScreenDepth = SysCfb_GetZBufferPixel(sSunDepthTestX, sSunDepthTestY);
+#endif
     Lights_GlowCheck(play);
 }
 

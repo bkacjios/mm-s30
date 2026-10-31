@@ -3,9 +3,14 @@
 #include "fault.h"
 
 // Segment and Profile declarations (also used in the table below)
+#ifdef LINUX
+// Actors are linked in: no overlay segments
+#define DEFINE_ACTOR(name, _enumValue, _allocType, _debugName) extern struct ActorProfile name##_Profile;
+#else
 #define DEFINE_ACTOR(name, _enumValue, _allocType, _debugName) \
     extern struct ActorProfile name##_Profile;                 \
     DECLARE_OVERLAY_SEGMENT(name)
+#endif
 #define DEFINE_ACTOR_INTERNAL(name, _enumValue, _allocType, _debugName) extern struct ActorProfile name##_Profile;
 #define DEFINE_ACTOR_UNSET(_enumValue)
 
@@ -16,6 +21,13 @@
 #undef DEFINE_ACTOR_UNSET
 
 // Actor Overlay Table definition
+#ifdef LINUX
+// Every actor is internal (linked in), as the ones that live in code
+#define DEFINE_ACTOR(name, _enumValue, allocType, _debugName)                  \
+    {                                                                          \
+        ROM_FILE_UNSET, NULL, NULL, NULL, &name##_Profile, NULL, allocType, 0, \
+    },
+#else
 #define DEFINE_ACTOR(name, _enumValue, allocType, _debugName) \
     {                                                         \
         ROM_FILE(ovl_##name),                                 \
@@ -27,6 +39,7 @@
         allocType,                                            \
         0,                                                    \
     },
+#endif
 
 #define DEFINE_ACTOR_INTERNAL(name, _enumValue, allocType, _debugName)         \
     {                                                                          \

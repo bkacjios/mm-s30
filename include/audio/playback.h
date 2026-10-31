@@ -25,12 +25,22 @@ typedef enum AudioError {
 
 typedef union {
     struct {
+#ifdef LINUX
+        // Little-endian: bitfields pack from LSB
+        /* 0x0 */ u8 strongReverbLeft : 1;
+        /* 0x0 */ u8 strongReverbRight : 1;
+        /* 0x0 */ u8 strongLeft : 1;
+        /* 0x0 */ u8 strongRight : 1;
+        /* 0x0 */ u8 type : 2;
+        /* 0x0 */ u8 unused : 2;
+#else
         /* 0x0 */ u8 unused : 2;
         /* 0x0 */ u8 type : 2;
         /* 0x0 */ u8 strongRight : 1;
         /* 0x0 */ u8 strongLeft : 1;
         /* 0x0 */ u8 strongReverbRight : 1;
         /* 0x0 */ u8 strongReverbLeft : 1;
+#endif
     };
     /* 0x0 */ u8 asByte;
 } StereoData; // size = 0x1

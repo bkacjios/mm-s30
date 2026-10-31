@@ -19,6 +19,149 @@ StackEntry sSysFlashromStackInfo;
 OSThread sSysFlashromThread;
 FlashromRequest sFlashromRequest;
 
+#ifdef LINUX
+// No flash chip: the 128 KiB flash image lives in RAM and in the save file
+// (gS30SaveFile), rewritten whole after every write. A missing file reads as
+// erased flash (all 0xFF), which the save code treats as no saves.
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include "s30_platform.h"
+
+static u8 sFlashImage[FLASH_SIZE];
+
+static void SysFlashrom_Persist(void) {
+    char tmp[512];
+    FILE* f;
+
+    snprintf(tmp, sizeof(tmp), "%s.tmp", gS30SaveFile);
+    f = fopen(tmp, "wb");
+    if (f == NULL) {
+        perror(tmp);
+        return;
+    }
+    if (fwrite(sFlashImage, 1, sizeof(sFlashImage), f) != sizeof(sFlashImage) || fflush(f) != 0) {
+        perror(tmp);
+        fclose(f);
+        return;
+    }
+    fsync(fileno(f));
+    fclose(f);
+    rename(tmp, gS30SaveFile);
+}
+
+s32 SysFlashrom_IsInit(void) {
+    return sFlashromIsInit;
+}
+
+const char* SysFlashrom_GetVendorStr(void) {
+    return "FILE";
+}
+
+s32 SysFlashrom_CheckFlashType(void) {
+    return 0;
+}
+
+s32 SysFlashrom_InitFlash(void) {
+    FILE* f;
+
+    if (sFlashromIsInit) {
+        return 0;
+    }
+    memset(sFlashImage, 0xFF, sizeof(sFlashImage));
+    f = fopen(gS30SaveFile, "rb");
+    if (f != NULL) {
+        size_t n = fread(sFlashImage, 1, sizeof(sFlashImage), f);
+
+        fclose(f);
+        osSyncPrintf("flash: %s, %u bytes\n", gS30SaveFile, (u32)n);
+    } else {
+        osSyncPrintf("flash: %s not found, starting blank\n", gS30SaveFile);
+    }
+    sFlashromIsInit = true;
+    return 0;
+}
+
+static s32 SysFlashrom_InRange(u32 pageNum, u32 pageCount) {
+    return (pageNum + pageCount) * FLASH_BLOCK_SIZE <= sizeof(sFlashImage);
+}
+
+s32 SysFlashrom_Read(void* addr, u32 pageNum, u32 pageCount) {
+    if (!sFlashromIsInit || !SysFlashrom_InRange(pageNum, pageCount)) {
+        return -1;
+    }
+    memcpy(addr, &sFlashImage[pageNum * FLASH_BLOCK_SIZE], pageCount * FLASH_BLOCK_SIZE);
+    return 0;
+}
+
+s32 SysFlashrom_EraseSector(u32 page) {
+    // A sector is 128 pages (16 KiB)
+    page &= ~0x7F;
+    if (!sFlashromIsInit || !SysFlashrom_InRange(page, 0x80)) {
+        return -1;
+    }
+    memset(&sFlashImage[page * FLASH_BLOCK_SIZE], 0xFF, 0x80 * FLASH_BLOCK_SIZE);
+    SysFlashrom_Persist();
+    return 0;
+}
+
+s32 SysFlashrom_Write(void* addr, u32 pageNum, u32 pageCount) {
+    if (!sFlashromIsInit || !SysFlashrom_InRange(pageNum, pageCount)) {
+        return -1;
+    }
+    memcpy(&sFlashImage[pageNum * FLASH_BLOCK_SIZE], addr, pageCount * FLASH_BLOCK_SIZE);
+    SysFlashrom_Persist();
+    return 0;
+}
+
+s32 SysFlashrom_ExecWrite(void* addr, u32 pageNum, u32 pageCount) {
+    return SysFlashrom_Write(addr, pageNum, pageCount);
+}
+
+s32 SysFlashrom_AttemptWrite(void* addr, u32 pageNum, u32 pageCount) {
+    return SysFlashrom_Write(addr, pageNum, pageCount);
+}
+
+// No flashrom thread: the write happens now and its result is posted for
+// SysFlashrom_IsBusy (true once the result is in) and SysFlashrom_AwaitResult
+void SysFlashrom_WriteAsync(void* addr, u32 pageNum, u32 pageCount) {
+    FlashromRequest* req = &sFlashromRequest;
+
+    if (sFlashromIsInit) {
+        req->type = FLASHROM_REQUEST_WRITE;
+        req->addr = addr;
+        req->pageNum = pageNum;
+        req->pageCount = pageCount;
+        osCreateMesgQueue(&req->queue, req->msgBuf, ARRAY_COUNT(req->msgBuf));
+        req->response = SysFlashrom_Write(addr, pageNum, pageCount);
+        osSendMesg(&req->queue, (OSMesg)(intptr_t)req->response, OS_MESG_NOBLOCK);
+    }
+}
+
+s32 SysFlashrom_IsBusy(void) {
+    FlashromRequest* req = &sFlashromRequest;
+
+    if (!sFlashromIsInit) {
+        return -1;
+    }
+    return MQ_IS_FULL(&req->queue);
+}
+
+s32 SysFlashrom_AwaitResult(void) {
+    FlashromRequest* req = &sFlashromRequest;
+
+    if (!sFlashromIsInit) {
+        return -1;
+    }
+    osRecvMesg(&req->queue, NULL, OS_MESG_NOBLOCK);
+    return req->response;
+}
+
+void SysFlashrom_WriteSync(void* addr, u32 pageNum, u32 pageCount) {
+    SysFlashrom_WriteAsync(addr, pageNum, pageCount);
+    SysFlashrom_AwaitResult();
+}
+#else
 s32 SysFlashrom_IsInit(void) {
     return sFlashromIsInit;
 }
@@ -258,3 +401,4 @@ void SysFlashrom_WriteSync(void* addr, u32 pageNum, u32 pageCount) {
     SysFlashrom_WriteAsync(addr, pageNum, pageCount);
     SysFlashrom_AwaitResult();
 }
+#endif

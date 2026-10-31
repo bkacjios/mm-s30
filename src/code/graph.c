@@ -143,7 +143,26 @@ void Graph_Destroy(GraphicsContext* gfxCtx) {
  * Waits for up to 3 additional seconds for any current graphics task to complete.
  * If it does not signal completion in that time, retry or trigger a crash.
  */
+#ifdef LINUX
+#include "s30_platform.h"
+#include "s30_audio.h"
+void pc_process_displaylist(Gfx* dl);
+#endif
+
 void Graph_TaskSet00(GraphicsContext* gfxCtx, GameState* gameState) {
+#ifdef LINUX
+    // No RSP: the renderer (src/s30/gfx.c) runs the frame's display list now
+    // and presents it, paced by the game's update rate (as in ports/oot).
+    // The previous frame is complete, so the callback can read its z-buffer.
+    S30Display_SetUpdateRate(R_UPDATE_RATE);
+    S30Gfx_BeginDepthTests();
+    gfxCtx->masterList = gGfxMasterDL;
+    if (gfxCtx->callback != NULL) {
+        gfxCtx->callback(gfxCtx, gfxCtx->callbackArg);
+    }
+    pc_process_displaylist(gGfxMasterDL->taskStart);
+    return;
+#else
     OSTask_t* task = &gfxCtx->task.list.t;
     OSScTask* scTask = &gfxCtx->task;
     OSTimer timer;
@@ -247,13 +266,20 @@ retry:
     gfxCtx->schedMsgQ = &gScheduler.cmdQueue;
     osSendMesg(&gScheduler.cmdQueue, (OSMesg)scTask, OS_MESG_BLOCK);
     Sched_SendNotifyMsg(&gScheduler);
+#endif
 }
 
 void Graph_UpdateGame(GameState* gameState) {
     GameState_GetInput(gameState);
     GameState_IncrementFrameCount(gameState);
     if (R_AUDIOMGR_DEBUG_LEVEL < 3) {
+#ifdef LINUX
+        S30Audio_Lock();
         Audio_Update();
+        S30Audio_Unlock();
+#else
+        Audio_Update();
+#endif
     }
 }
 
@@ -377,6 +403,12 @@ void Graph_ThreadEntry(void* arg) {
     SysCfb_Init();
     Fault_SetFrameBuffer(gWorkBuffer, SCREEN_WIDTH, SCREEN_HEIGHT);
     Graph_Init(&gfxCtx);
+
+#ifdef LINUX
+    if (gS30EnableAudio) {
+        S30Audio_Init(); // the audio thread (src/s30/audio.c)
+    }
+#endif
 
     while (nextOvl) {
         GameStateOverlay* ovl = nextOvl;

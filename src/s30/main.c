@@ -1,0 +1,131 @@
+/*
+ * Majora's Mask on the PocketGo S30: process entry.
+ *
+ * Environment:
+ *   MM_DATA      asset segment directory (default: "data" next to the binary)
+ *   MM_SAVE      save file (default: $XDG_DATA_HOME/mm/mm.sav, i.e.
+ *                ~/.local/share/mm/mm.sav; else mm.sav next to the binary)
+ *   MM_NOAUDIO   set to run without sound
+ */
+#include <libgen.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <ucontext.h>
+#include <unistd.h>
+
+#include "ultra64.h"
+#include "s30_audio.h"
+#include "s30_display.h"
+#include "s30_input.h"
+#include "s30_platform.h"
+
+#include <errno.h> // after the game headers: controller.h has an errno field
+
+const char* gS30DataDir;
+const char* gS30SaveFile;
+
+extern void Main(void* arg);
+extern void AudioRom_LoadAll(void);
+extern void S30Gfx_Init(void);
+
+/* mkdir -p for a path's parent directories */
+static void make_parents(const char* path) {
+    char* p = strdup(path);
+    char* s;
+
+    for (s = strchr(p + 1, '/'); s != NULL; s = strchr(s + 1, '/')) {
+        *s = '\0';
+        if (mkdir(p, 0755) != 0 && errno != EEXIST) {
+            perror(p);
+        }
+        *s = '/';
+    }
+    free(p);
+}
+
+/* XDG data location for the save */
+static const char* default_save(const char* home) {
+    const char* xdg = getenv("XDG_DATA_HOME");
+    char* path = malloc(strlen(xdg ? xdg : home) + 32);
+
+    if (xdg != NULL && xdg[0] == '/') {
+        sprintf(path, "%s/mm/mm.sav", xdg);
+    } else {
+        sprintf(path, "%s/.local/share/mm/mm.sav", home);
+    }
+    make_parents(path);
+    return path;
+}
+
+static const char* path_beside(const char* exeDir, const char* name) {
+    char* p = malloc(strlen(exeDir) + strlen(name) + 2);
+
+    sprintf(p, "%s/%s", exeDir, name);
+    return p;
+}
+
+/* Crash report on stderr (the launcher logs it): fault address, registers and
+   the code addresses found on the stack, for addr2line against the binary */
+static void on_crash(int sig, siginfo_t* info, void* ctx) {
+    extern char __executable_start[], etext[];
+    const mcontext_t* mc = &((const ucontext_t*)ctx)->uc_mcontext;
+    const uintptr_t* sp = (const uintptr_t*)mc->arm_sp;
+    char buf[160];
+    int i, n = 0;
+
+    snprintf(buf, sizeof(buf), "crash: signal %d at %p pc %08lx lr %08lx sp %08lx\ncrash: stack", sig,
+             info->si_addr, mc->arm_pc, mc->arm_lr, mc->arm_sp);
+    write(2, buf, strlen(buf));
+    for (i = 0; i < 512 && n < 24; i++) {
+        if (sp[i] >= (uintptr_t)__executable_start && sp[i] < (uintptr_t)etext) {
+            snprintf(buf, sizeof(buf), " %08lx", (unsigned long)sp[i]);
+            write(2, buf, strlen(buf));
+            n++;
+        }
+    }
+    write(2, "\n", 1);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+int main(int argc, char** argv) {
+    char* exe = strdup(argv[0]);
+    const char* exeDir = dirname(exe);
+    const char* home = getenv("HOME");
+
+    setvbuf(stdout, NULL, _IOLBF, 0); // logs survive a crash
+    {
+        struct sigaction sa;
+
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_sigaction = on_crash;
+        sa.sa_flags = SA_SIGINFO;
+        sigaction(SIGSEGV, &sa, NULL);
+        sigaction(SIGBUS, &sa, NULL);
+        sigaction(SIGILL, &sa, NULL);
+        sigaction(SIGFPE, &sa, NULL);
+    }
+
+    gS30DataDir = getenv("MM_DATA") ? getenv("MM_DATA") : path_beside(exeDir, "data");
+    if (getenv("MM_SAVE")) {
+        gS30SaveFile = getenv("MM_SAVE");
+    } else {
+        gS30SaveFile = home != NULL ? default_save(home) : path_beside(exeDir, "mm.sav");
+    }
+    gS30EnableAudio = getenv("MM_NOAUDIO") == NULL;
+    printf("mm: data %s, save %s, audio %s\n", gS30DataDir, gS30SaveFile, gS30EnableAudio ? "on" : "off");
+
+    S30Display_Init();
+    S30Gfx_Init();
+    S30Input_Init();
+    if (gS30EnableAudio) {
+        AudioRom_LoadAll();
+    }
+
+    __osTimerServicesInit();
+    Main(NULL);
+    return 0;
+}

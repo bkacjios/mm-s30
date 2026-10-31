@@ -828,6 +828,17 @@ void PadMgr_Init(OSMesgQueue* siEvtQ, IrqMgr* irqMgr, OSId threadId, OSPri pri, 
     bzero(sPadMgrInstance, sizeof(PadMgr));
     sPadMgrInstance->irqMgr = irqMgr;
 
+#ifdef LINUX
+    // No serial bus or pad thread: PC_UpdateInput (src/linux/reimpl.c) fills
+    // inputs[0] from the S30 gamepad each frame (as in ports/oot)
+    osCreateMesgQueue(&sPadMgrInstance->lockQueue, &sPadMgrInstance->lockMsg, 1);
+    PadMgr_UnlockPadData();
+    sPadMgrInstance->nControllers = MAXCONTROLLERS;
+    sPadMgrInstance->validCtrlrsMask = 1;
+    sPadMgrInstance->ctrlrType[0] = PADMGR_CONT_NORMAL;
+    return;
+#endif
+
     // These are unique access tokens, there should only ever be room for one OSMesg in these queues
     osCreateMesgQueue(&sPadMgrInstance->serialLockQueue, &sPadMgrInstance->serialMsg, 1);
 

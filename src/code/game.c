@@ -1,4 +1,7 @@
 #include "z64game.h"
+#ifdef LINUX
+#include "s30_audio.h"
+#endif
 
 #include "global.h"
 #include "audiomgr.h"
@@ -146,7 +149,14 @@ void GameState_DrawEnd(GraphicsContext* gfxCtx) {
     CLOSE_DISPS(gfxCtx);
 }
 
+#ifdef LINUX
+void PC_UpdateInput(void);
+#endif
+
 void GameState_GetInput(GameState* gameState) {
+#ifdef LINUX
+    PC_UpdateInput(); // the S30 gamepad into the pad manager (no pad thread)
+#endif
     PadMgr_GetInput(gameState->input, true);
 }
 
@@ -260,7 +270,13 @@ void GameState_Destroy(GameState* gameState) {
     PRINTF(T("\n***** game デストラクタ開始 *****\n\n", "\n***** game destructor start *****\n\n"));
 
     AudioMgr_StopAllSfxExceptSystem();
+#ifdef LINUX
+    S30Audio_Lock();
     Audio_Update();
+    S30Audio_Unlock();
+#else
+    Audio_Update();
+#endif
     osRecvMesg(&gameState->gfxCtx->queue, NULL, OS_MESG_BLOCK);
 
     if (gameState->destroy != NULL) {

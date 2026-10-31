@@ -4,8 +4,13 @@
 #include "fault.h"
 #include "libu64/loadfragment.h"
 
+#ifdef LINUX
+// The overlays are linked into the executable: no ROM file, no VRAM range
+#define KALEIDO_OVERLAY(name) { NULL, ROM_FILE_UNSET, NULL, NULL, 0, #name }
+#else
 #define KALEIDO_OVERLAY(name) \
     { NULL, ROM_FILE(ovl_##name), SEGMENT_START(ovl_##name), SEGMENT_END(ovl_##name), 0, #name }
+#endif
 
 KaleidoMgrOverlay gKaleidoMgrOverlayTable[KALEIDO_OVL_MAX] = {
     KALEIDO_OVERLAY(kaleido_scope),
@@ -39,6 +44,13 @@ uintptr_t KaleidoManager_FaultAddrConv(uintptr_t address, void* param) {
 }
 
 void KaleidoManager_LoadOvl(KaleidoMgrOverlay* ovl) {
+#ifdef LINUX
+    // Linked in: just mark it current
+    ovl->loadedRamAddr = ovl->vramStart;
+    ovl->offset = 0;
+    gKaleidoMgrCurOvl = ovl;
+    return;
+#endif
     ovl->loadedRamAddr = sKaleidoAreaPtr;
     Overlay_Load(ovl->file.vromStart, ovl->file.vromEnd, ovl->vramStart, ovl->vramEnd, ovl->loadedRamAddr);
     ovl->offset = (uintptr_t)ovl->loadedRamAddr - (uintptr_t)ovl->vramStart;
@@ -48,7 +60,9 @@ void KaleidoManager_LoadOvl(KaleidoMgrOverlay* ovl) {
 void KaleidoManager_ClearOvl(KaleidoMgrOverlay* ovl) {
     if (ovl->loadedRamAddr != NULL) {
         ovl->offset = 0;
+#ifndef LINUX // nothing was copied in
         bzero(ovl->loadedRamAddr, (uintptr_t)ovl->vramEnd - (uintptr_t)ovl->vramStart);
+#endif
         ovl->loadedRamAddr = NULL;
         gKaleidoMgrCurOvl = NULL;
     }
@@ -66,7 +80,9 @@ void KaleidoManager_Init(PlayState* play) {
         }
     }
 
+#ifndef LINUX // no area to load overlays into
     sKaleidoAreaPtr = THA_AllocTailAlign16(&play->state.tha, largestSize);
+#endif
     gKaleidoMgrCurOvl = NULL;
     Fault_AddAddrConvClient(&sKaleidoMgrFaultAddrConvClient, KaleidoManager_FaultAddrConv, NULL);
 }
@@ -84,6 +100,11 @@ void KaleidoManager_Destroy(void) {
 
 void* KaleidoManager_GetRamAddr(void* vram) {
     KaleidoMgrOverlay* ovl = gKaleidoMgrCurOvl;
+
+#ifdef LINUX
+    // Linked in: the address is already the function's
+    return vram;
+#endif
 
     if (ovl == NULL) {
         s32 i;

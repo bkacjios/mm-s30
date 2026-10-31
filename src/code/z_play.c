@@ -46,6 +46,18 @@ typedef enum {
     /* 2 */ MOTION_BLUR_PROCESS
 } MotionBlurStatus;
 
+#ifdef LINUX
+/* Renderer markers (src/s30/gfx.c): the frame is on the GPU, not in RAM, so
+   effects that read it are done there (as in ports/oot) */
+#include "s30_platform.h"
+#define S30_GFX_MARK_EMIT(disp, subop) \
+    do {                               \
+        Gfx* _g = (disp)++;            \
+        _g->words.w0 = S30_GFX_MARK;   \
+        _g->words.w1 = (subop);        \
+    } while (0)
+#endif
+
 void Play_DrawMotionBlur(PlayState* this) {
     GraphicsContext* gfxCtx = this->state.gfxCtx;
     s32 alpha;
@@ -77,6 +89,17 @@ void Play_DrawMotionBlur(PlayState* this) {
 
         gSPDisplayList(OVERLAY_DISP++, gfx);
 
+#ifdef LINUX
+        // The frame is on the GPU, not in RAM: the renderer blends and saves
+        // it (src/s30/display.c), the blend alpha in prim alpha
+        if (sMotionBlurStatus == MOTION_BLUR_PROCESS) {
+            gDPSetColor(gfx++, G_SETPRIMCOLOR, alpha & 0xFF);
+            S30_GFX_MARK_EMIT(gfx, S30_MARK_MBLUR_BLEND);
+        } else {
+            sMotionBlurStatus = MOTION_BLUR_PROCESS;
+        }
+        S30_GFX_MARK_EMIT(gfx, S30_MARK_MBLUR_SAVE);
+#else
         this->pauseBgPreRender.fbuf = gfxCtx->curFrameBuffer;
         this->pauseBgPreRender.fbufSave = this->unk_18E64;
 
@@ -87,6 +110,7 @@ void Play_DrawMotionBlur(PlayState* this) {
         }
 
         PreRender_SaveFramebuffer(&this->pauseBgPreRender, &gfx);
+#endif
 
         gSPEndDisplayList(gfx++);
 
@@ -1234,7 +1258,14 @@ void Play_DrawMain(PlayState* this) {
 
             if (gPlayVisMonoColor.a != 0) {
                 sPlayVisMono.vis.primColor.rgba = gPlayVisMonoColor.rgba;
+#ifdef LINUX
+                // The renderer desaturates the frame with these colors
+                gDPSetColor(sp218++, G_SETPRIMCOLOR, sPlayVisMono.vis.primColor.rgba);
+                gDPSetColor(sp218++, G_SETENVCOLOR, sPlayVisMono.vis.envColor.rgba);
+                S30_GFX_MARK_EMIT(sp218, S30_MARK_VISMONO);
+#else
                 VisMono_Draw(&sPlayVisMono, &sp218);
+#endif
             }
 
             gSPEndDisplayList(sp218++);
@@ -1254,21 +1285,27 @@ void Play_DrawMain(PlayState* this) {
         PreRender_SetValues(&this->pauseBgPreRender, gCfbWidth, gCfbHeight, gfxCtx->curFrameBuffer, gfxCtx->zbuffer);
 
         if (R_PAUSE_BG_PRERENDER_STATE == PAUSE_BG_PRERENDER_PROCESS) {
+#ifndef LINUX // the background was saved on the GPU: no CPU filtering
             Sched_FlushTaskQueue();
             if (!gSaveContext.screenScaleFlag) {
                 PreRender_ApplyFiltersSlowlyInit(&this->pauseBgPreRender);
             }
+#endif
             R_PAUSE_BG_PRERENDER_STATE = PAUSE_BG_PRERENDER_READY;
             SREG(33) |= 1;
         } else {
             if (R_PAUSE_BG_PRERENDER_STATE == PAUSE_BG_PRERENDER_READY) {
                 Gfx* sp8C = POLY_OPA_DISP;
 
+#ifdef LINUX
+                S30_GFX_MARK_EMIT(sp8C, S30_MARK_BG_RESTORE);
+#else
                 if (this->pauseBgPreRender.filterState == PRERENDER_FILTER_STATE_DONE) {
                     PreRender_RestoreFramebuffer(&this->pauseBgPreRender, &sp8C);
                 } else {
                     func_80170798(&this->pauseBgPreRender, &sp8C);
                 }
+#endif
 
                 gSPDisplayList(sp8C++, D_0E000000.syncSegments);
                 POLY_OPA_DISP = sp8C;
@@ -1403,11 +1440,17 @@ void Play_DrawMain(PlayState* this) {
                     this->pauseBgPreRender.cvgSave = NULL;
                 }
 
+#ifdef LINUX
+                // Saved on the GPU (the pause background; the Pictograph Box
+                // and transition tile, which read it from RAM, don't work yet)
+                S30_GFX_MARK_EMIT(sp74, S30_MARK_BG_SAVE);
+#else
                 PreRender_SaveFramebuffer(&this->pauseBgPreRender, &sp74);
 
                 if (this->pauseBgPreRender.cvgSave != NULL) {
                     PreRender_DrawCoverage(&this->pauseBgPreRender, &sp74);
                 }
+#endif
 
                 gSPEndDisplayList(sp74++);
                 Gfx_Close(sp70, sp74);

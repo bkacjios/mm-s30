@@ -13,6 +13,16 @@
 #include "audio/effects.h"
 #include "attributes.h"
 
+#ifdef LINUX
+/* Envelope points stay big-endian in RAM (in soundfonts, and embedded in
+   sequences): swapped when read (as in ports/oot) */
+#define ENV_DELAY(env, idx) ((s16)__builtin_bswap16((u16)(env)[(idx)].delay))
+#define ENV_ARG(env, idx) ((s16)__builtin_bswap16((u16)(env)[(idx)].arg))
+#else
+#define ENV_DELAY(env, idx) ((env)[(idx)].delay)
+#define ENV_ARG(env, idx) ((env)[(idx)].arg)
+#endif
+
 void AudioScript_SequenceChannelProcessSound(SequenceChannel* channel, s32 recalculateVolume, s32 applyBend) {
     f32 channelVolume;
     f32 chanFreqScale;
@@ -274,7 +284,7 @@ f32 AudioEffects_UpdateAdsr(AdsrState* adsr) {
         retry:;
             FALLTHROUGH;
         case ADSR_STATUS_LOOP:
-            adsr->delay = adsr->envelope[adsr->envelopeIndex].delay;
+            adsr->delay = ENV_DELAY(adsr->envelope, adsr->envelopeIndex);
             switch (adsr->delay) {
                 case ADSR_DISABLE:
                     adsr->action.s.status = ADSR_STATUS_DISABLED;
@@ -285,7 +295,7 @@ f32 AudioEffects_UpdateAdsr(AdsrState* adsr) {
                     break;
 
                 case ADSR_GOTO:
-                    adsr->envelopeIndex = adsr->envelope[adsr->envelopeIndex].arg;
+                    adsr->envelopeIndex = ENV_ARG(adsr->envelope, adsr->envelopeIndex);
                     goto retry;
 
                 case ADSR_RESTART:
@@ -297,7 +307,7 @@ f32 AudioEffects_UpdateAdsr(AdsrState* adsr) {
                     if (adsr->delay == 0) {
                         adsr->delay = 1;
                     }
-                    adsr->target = adsr->envelope[adsr->envelopeIndex].arg / 32767.0f;
+                    adsr->target = ENV_ARG(adsr->envelope, adsr->envelopeIndex) / 32767.0f;
                     adsr->target = SQ(adsr->target);
                     adsr->velocity = (adsr->target - adsr->current) / adsr->delay;
                     adsr->action.s.status = ADSR_STATUS_FADE;

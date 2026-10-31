@@ -52,6 +52,56 @@
 #include "su_mtx.h"
 #include "z64math.h"
 
+#ifdef LINUX
+/*
+ * The port's Mtx is plain floats (include/PR/gbi.h): the same matrices as the
+ * fixed-point code below builds, element for element, including the sign bug
+ * in the rotations (see the N64 versions for the derivation)
+ */
+#include <string.h>
+
+void Mtx_SetTranslateScaleMtx(Mtx* mtx, f32 scaleX, f32 scaleY, f32 scaleZ, f32 translateX, f32 translateY,
+                              f32 translateZ) {
+    memset(mtx, 0, sizeof(*mtx));
+    mtx->m[0][0] = scaleX;
+    mtx->m[1][1] = scaleY;
+    mtx->m[2][2] = scaleZ;
+    mtx->m[3][0] = translateX;
+    mtx->m[3][1] = translateY;
+    mtx->m[3][2] = translateZ;
+    mtx->m[3][3] = 1.0f;
+}
+
+void Mtx_SetTranslationRotationScaleMtx(Mtx* mtx, f32 scaleX, f32 scaleY, f32 scaleZ, s32 angle, f32 axisX, f32 axisY,
+                                        f32 axisZ, f32 translateX, f32 translateY, f32 translateZ) {
+    f32 sin = Math_SinS(angle);
+    f32 cos = Math_CosS(angle);
+    f32 tempX = axisY * axisZ * (1.0f - cos);
+    f32 tempY = axisZ * axisX * (1.0f - cos);
+    f32 tempZ = axisX * axisY * (1.0f - cos);
+
+    memset(mtx, 0, sizeof(*mtx));
+    mtx->m[0][0] = (axisX * axisX + (1.0f - axisX * axisX) * cos) * scaleX;
+    mtx->m[0][1] = (tempZ + axisZ * sin) * scaleX;
+    mtx->m[0][2] = (tempY + axisY * sin) * scaleX; //! @bug sign of axisY * sin (as on the N64)
+    mtx->m[1][0] = (tempZ - axisZ * sin) * scaleY;
+    mtx->m[1][1] = (axisY * axisY + (1.0f - axisY * axisY) * cos) * scaleY;
+    mtx->m[1][2] = (tempX + axisX * sin) * scaleY;
+    mtx->m[2][0] = (tempY - axisY * sin) * scaleZ; //! @bug sign of axisY * sin (as on the N64)
+    mtx->m[2][1] = (tempX - axisX * sin) * scaleZ;
+    mtx->m[2][2] = (axisZ * axisZ + (1.0f - axisZ * axisZ) * cos) * scaleZ;
+    mtx->m[3][0] = translateX;
+    mtx->m[3][1] = translateY;
+    mtx->m[3][2] = translateZ;
+    mtx->m[3][3] = 1.0f;
+}
+
+void Mtx_SetRotationMtx(Mtx* mtx, s32 angle, f32 axisX, f32 axisY, f32 axisZ) {
+    Mtx_SetTranslationRotationScaleMtx(mtx, 1.0f, 1.0f, 1.0f, angle, axisX, axisY, axisZ, 0.0f, 0.0f, 0.0f);
+}
+
+#else
+
 /**
  * Constructs a matrix \$f ST \$f, i.e. a scaling \$f S \$f followed by a translation \$f T \$f.
  *
@@ -365,3 +415,5 @@ void Mtx_SetTranslationRotationScaleMtx(Mtx* mtx, f32 scaleX, f32 scaleY, f32 sc
     mtx->intPart[3][3] = 1;              // clean i33
     mtx->m[3][3] = (fixedPoint << 0x10); // [f32, f33]
 }
+
+#endif

@@ -27,6 +27,23 @@
 #define E_VEC       (K0BASE + 0x180)        /* Gen. exception vector */
 
 /* Address conversion macros */
+#ifdef LINUX
+/* No N64 address space: addresses pass through (as in ports/oot) */
+#define K0_TO_K1(x)     ((uintptr_t)(x))
+#define K1_TO_K0(x)     ((uintptr_t)(x))
+#define K0_TO_PHYS(x)   ((uintptr_t)(x))
+#define K1_TO_PHYS(x)   ((uintptr_t)(x))
+#define KDM_TO_PHYS(x)  ((uintptr_t)(x))
+#define PHYS_TO_K0(x)   ((uintptr_t)(x))
+#define PHYS_TO_K1(x)   ((uintptr_t)(x))
+
+#define IS_KSEG0(x)     (0)
+#define IS_KSEG1(x)     (0)
+#define IS_KSEGDM(x)    (0)
+#define IS_KSEG2(x)     (0)
+#define IS_KPTESEG(x)   (0)
+#define IS_KUSEG(x)     (1)
+#else
 #define K0_TO_K1(x)     (U32(x) | 0xA0000000)  /* kseg0 to kseg1 */
 #define K1_TO_K0(x)     (U32(x) & 0x9FFFFFFF)  /* kseg1 to kseg0 */
 #define K0_TO_PHYS(x)   (U32(x) & 0x1FFFFFFF)  /* kseg0 to physical */
@@ -42,6 +59,7 @@
 #define IS_KSEG2(x)     (U32(x) >= K2BASE && U32(x) < KPTE_SHDUBASE)
 #define IS_KPTESEG(x)   (U32(x) >= KPTE_SHDUBASE)
 #define IS_KUSEG(x)     (U32(x) < K0BASE)
+#endif
 
 /* TLB size constants */
 #define NTLBENTRIES 31      /* entry 31 is reserved by rdb */
