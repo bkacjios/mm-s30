@@ -167,12 +167,59 @@ f32 sBButtonDoActionTextureScales[] = {
     109.0f, // LANGUAGE_ENG
     // Data missing for other languages?
 };
+#ifdef LINUX
+/* PocketGo S30 HUD, as in ports/oot (interface.h there): the buttons sit where
+   they are on the device (s30/input.c), drawn SNES style. A face diamond of
+   27 px buttons: B on the left (Y), A at the bottom (B), C-left on top (X),
+   C-down on the right (A). C-right (R1) is a shoulder pill in the top right
+   corner, C-up (Select, Tatl) a slanted pill top left. */
+#define S30_A_BUTTON_X 239
+#define S30_A_BUTTON_Y 38
+#define S30_A_BUTTON_VIEW 40 // A disc 25.5 px: its sharp 3D edge reads larger than the 27 px sprites
+#define S30_B_BUTTON_X 223
+#define S30_B_BUTTON_Y 23
+#define S30_C_LEFT_BUTTON_X 245
+#define S30_C_LEFT_BUTTON_Y 2
+#define S30_C_DOWN_BUTTON_X 267
+#define S30_C_DOWN_BUTTON_Y 23
+// Shoulder pill: corner and size; its item icon is centred, S30_SHOULDER_ICON px
+#define S30_SHOULDER_X 274
+#define S30_SHOULDER_Y 3
+#define S30_SHOULDER_W 44
+#define S30_SHOULDER_H 20
+#define S30_SHOULDER_ICON 20
+#define S30_SHOULDER_ICON_X (S30_SHOULDER_X + (S30_SHOULDER_W - S30_SHOULDER_ICON) / 2)
+#define S30_SHOULDER_ICON_Y (S30_SHOULDER_Y + (S30_SHOULDER_H - S30_SHOULDER_ICON) / 2)
+// Select pill: centre (the "Tatl" label is centred on it)
+#define S30_C_UP_BUTTON_X 210
+#define S30_C_UP_BUTTON_Y 15
+#endif
+
 s16 sItemIconTextureScales[] = {
+#ifdef LINUX
+    (s16)(1.328125f * (1 << 10)) >> 1, // EQUIP_SLOT_B: the size of a C button
+#else
     (s16)(1.074219f * (1 << 10)) >> 1, // EQUIP_SLOT_B
+#endif
     (s16)(1.328125f * (1 << 10)) >> 1, // EQUIP_SLOT_C_LEFT
     (s16)(1.328125f * (1 << 10)) >> 1, // EQUIP_SLOT_C_DOWN
+#ifdef LINUX
+    ((32 << 10) / S30_SHOULDER_ICON) >> 1, // EQUIP_SLOT_C_RIGHT: the shoulder pill's icon
+#else
     (s16)(1.328125f * (1 << 10)) >> 1, // EQUIP_SLOT_C_RIGHT
+#endif
 };
+#ifdef LINUX
+// Same place relative to the B button's centre as in ports/oot
+s16 sBButtonDoActionXPositions[] = {
+    S30_B_BUTTON_X - 10, // LANGUAGE_JPN
+    S30_B_BUTTON_X - 13, // LANGUAGE_ENG
+};
+s16 sBButtonDoActionYPositions[] = {
+    S30_B_BUTTON_Y + 5, // LANGUAGE_JPN
+    S30_B_BUTTON_Y + 4, // LANGUAGE_ENG
+};
+#else
 s16 sBButtonDoActionXPositions[] = {
     158, // LANGUAGE_JPN
     155, // LANGUAGE_ENG
@@ -183,11 +230,27 @@ s16 sBButtonDoActionYPositions[] = {
     22, // LANGUAGE_ENG
     // Data missing for other languages?
 };
+#endif
 f32 sAButtonDoActionTexScales[] = {
     -380.0f, // LANGUAGE_JPN
     -350.0f, // LANGUAGE_ENG
     // Data missing for other languages?
 };
+#ifdef LINUX
+// C-right: the shoulder pill's item icon (the pill itself is S30_SHOULDER_*)
+s16 sBCButtonXPositions[] = {
+    S30_B_BUTTON_X,      // EQUIP_SLOT_B
+    S30_C_LEFT_BUTTON_X, // EQUIP_SLOT_C_LEFT
+    S30_C_DOWN_BUTTON_X, // EQUIP_SLOT_C_DOWN
+    S30_SHOULDER_ICON_X, // EQUIP_SLOT_C_RIGHT
+};
+s16 sBCButtonYPositions[] = {
+    S30_B_BUTTON_Y,      // EQUIP_SLOT_B
+    S30_C_LEFT_BUTTON_Y, // EQUIP_SLOT_C_LEFT
+    S30_C_DOWN_BUTTON_Y, // EQUIP_SLOT_C_DOWN
+    S30_SHOULDER_ICON_Y, // EQUIP_SLOT_C_RIGHT
+};
+#else
 s16 sBCButtonXPositions[] = {
     167, // EQUIP_SLOT_B
     227, // EQUIP_SLOT_C_LEFT
@@ -200,12 +263,21 @@ s16 sBCButtonYPositions[] = {
     34, // EQUIP_SLOT_C_DOWN
     18, // EQUIP_SLOT_C_RIGHT
 };
+#endif
 
 s16 sBCButtonScales[] = {
+#ifdef LINUX
+    (s32)(1.2109375f * (1 << 10)) >> 1, // EQUIP_SLOT_B
+#else
     (s32)(1.1230469f * (1 << 10)) >> 1, // EQUIP_SLOT_B
+#endif
     (s32)(1.2109375f * (1 << 10)) >> 1, // EQUIP_SLOT_C_LEFT
     (s32)(1.2109375f * (1 << 10)) >> 1, // EQUIP_SLOT_C_DOWN
+#ifdef LINUX
+    ((32 << 10) / S30_SHOULDER_ICON) >> 1, // EQUIP_SLOT_C_RIGHT: the empty-slot arrow, at the icon
+#else
     (s32)(1.2109375f * (1 << 10)) >> 1, // EQUIP_SLOT_C_RIGHT
+#endif
 };
 
 s16 sFinalHoursClockDigitsRed = 0;
@@ -3994,6 +4066,91 @@ void Interface_SetOrthoView(InterfaceContext* interfaceCtx) {
     View_ApplyOrthoToOverlay(&interfaceCtx->view);
 }
 
+#ifdef LINUX
+/* S30 HUD pills cut from the round button texture (32x32): the left cap is
+   its left half, the middle its centre column stretched, the right cap its
+   right half (as in ports/oot) */
+
+static Gfx* Interface_DrawShoulderPillRects(Gfx* gfx, s32 x, s32 y) {
+    s32 w = S30_SHOULDER_W;
+    s32 h = S30_SHOULDER_H;
+    s32 scale = (32 << 10) / h; // texels per pixel
+
+    gSPTextureRectangle(gfx++, x << 2, y << 2, (x + h / 2) << 2, (y + h) << 2, G_TX_RENDERTILE, 0, 0, scale, scale);
+    gSPTextureRectangle(gfx++, (x + h / 2) << 2, y << 2, (x + w - h / 2) << 2, (y + h) << 2, G_TX_RENDERTILE,
+                        16 << 5, 0, 0, scale);
+    gSPTextureRectangle(gfx++, (x + w - h / 2) << 2, y << 2, (x + w) << 2, (y + h) << 2, G_TX_RENDERTILE, 16 << 5,
+                        0, scale, scale);
+    return gfx;
+}
+
+// C-right as a shoulder button: a horizontal pill with the other buttons' drop
+// shadow. The button texture is the loaded tile.
+static Gfx* Interface_DrawShoulderPill_DropShadow(Gfx* gfx, s16 r, s16 g, s16 b, s16 a) {
+    gDPPipeSync(gfx++);
+    gDPSetPrimColor(gfx++, 0, 0, 0, 0, 0, (a > 100) ? 100 : a);
+    gfx = Interface_DrawShoulderPillRects(gfx, S30_SHOULDER_X + 2, S30_SHOULDER_Y + 2);
+    gDPPipeSync(gfx++);
+    gDPSetPrimColor(gfx++, 0, 0, r, g, b, a);
+    return Interface_DrawShoulderPillRects(gfx, S30_SHOULDER_X, S30_SHOULDER_Y);
+}
+
+// C-up as Select: a pill slanted like the SNES Select button, drawn in 3D to
+// rotate it, at the A button's depth
+static void Interface_DrawSelectPill(PlayState* play, s16 r, s16 g, s16 b, s16 a) {
+    // A 30 px view at the A button's depth: 1.46 units per px.
+    // Pill 32 x 14 units (22 x 10 px), caps 7 units wide.
+    static const s16 sColX[4] = { -16, -9, 9, 16 };
+    static const s16 sColS[4] = { 0, 16 << 5, 16 << 5, 32 << 5 };
+    Vtx* vtx = GRAPH_ALLOC(play->state.gfxCtx, 8 * sizeof(Vtx));
+    s32 i;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    for (i = 0; i < 8; i++) {
+        Vtx* v = &vtx[i];
+
+        v->v.ob[0] = sColX[i / 2];
+        v->v.ob[1] = (i & 1) ? -7 : 7;
+        v->v.ob[2] = 0;
+        v->v.flag = 0;
+        v->v.tc[0] = sColS[i / 2];
+        v->v.tc[1] = (i & 1) ? (32 << 5) : 0;
+        v->v.cn[0] = v->v.cn[1] = v->v.cn[2] = v->v.cn[3] = 255;
+    }
+
+    gDPPipeSync(OVERLAY_DISP++);
+    Interface_SetPerspectiveView(play, S30_C_UP_BUTTON_Y - 15, S30_C_UP_BUTTON_Y + 15, S30_C_UP_BUTTON_X - 15,
+                                 S30_C_UP_BUTTON_X + 15);
+    gSPTexture(OVERLAY_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
+    gSPClearGeometryMode(OVERLAY_DISP++, G_CULL_BOTH | G_LIGHTING | G_FOG);
+    gDPSetOtherMode(OVERLAY_DISP++,
+                    G_AD_DISABLE | G_CD_MAGICSQ | G_CK_NONE | G_TC_FILT | G_TF_BILERP | G_TT_NONE | G_TL_TILE |
+                        G_TD_CLAMP | G_TP_NONE | G_CYC_1CYCLE | G_PM_NPRIMITIVE, // the label after is a rectangle
+                    G_AC_NONE | G_ZS_PRIM | G_RM_XLU_SURF | G_RM_XLU_SURF2);
+    gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, r, g, b, a);
+    Matrix_Translate(0.0f, 0.0f, -38.0f, MTXMODE_NEW);
+    Matrix_RotateZF(0.45f, MTXMODE_APPLY); // right end up, about 26 degrees
+    MATRIX_FINALIZE_AND_LOAD(OVERLAY_DISP++, play->state.gfxCtx);
+    gDPLoadTextureBlock(OVERLAY_DISP++, gButtonBackgroundTex, G_IM_FMT_IA, G_IM_SIZ_8b, 32, 32, 0,
+                        G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
+                        G_TX_NOLOD);
+    gSPVertex(OVERLAY_DISP++, vtx, 8, 0);
+    // Columns of (top, bottom) vertices: caps and middle as quads
+    gSP2Triangles(OVERLAY_DISP++, 0, 1, 3, 0, 0, 3, 2, 0);
+    gSP2Triangles(OVERLAY_DISP++, 2, 3, 5, 0, 2, 5, 4, 0);
+    gSP2Triangles(OVERLAY_DISP++, 4, 5, 7, 0, 4, 7, 6, 0);
+    gDPPipeSync(OVERLAY_DISP++);
+
+    // Back to the full-screen ortho view and the rectangles' modes
+    Interface_SetOrthoView(&play->interfaceCtx);
+    Gfx_SetupDL39_Overlay(play->state.gfxCtx);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+#endif
+
 void Interface_DrawItemButtons(PlayState* play) {
     static TexturePtr sCUpLabelTextures[LANGUAGE_MAX] = {
         gTatlCUpENGTex, // LANGUAGE_JPN
@@ -4012,10 +4169,17 @@ void Interface_DrawItemButtons(PlayState* play) {
     };
     static s16 sBCButtonSizes[] = {
         // Width and height
+#ifdef LINUX
+        27,                // EQUIP_SLOT_B: the size of a C button
+        27,                // EQUIP_SLOT_C_LEFT
+        27,                // EQUIP_SLOT_C_DOWN
+        S30_SHOULDER_ICON, // EQUIP_SLOT_C_RIGHT: the empty-slot arrow on the shoulder pill
+#else
         29, // EQUIP_SLOT_B
         27, // EQUIP_SLOT_C_LEFT
         27, // EQUIP_SLOT_C_DOWN
         27, // EQUIP_SLOT_C_RIGHT
+#endif
     };
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
     Player* player = GET_PLAYER(play);
@@ -4047,10 +4211,14 @@ void Interface_DrawItemButtons(PlayState* play) {
         sBCButtonSizes[EQUIP_SLOT_C_DOWN], sBCButtonSizes[EQUIP_SLOT_C_DOWN], sBCButtonScales[EQUIP_SLOT_C_DOWN] * 2,
         sBCButtonScales[EQUIP_SLOT_C_DOWN] * 2, 255, 240, 0, interfaceCtx->cDownAlpha);
     // C-Right Button Color & Texture
+#ifdef LINUX
+    OVERLAY_DISP = Interface_DrawShoulderPill_DropShadow(OVERLAY_DISP, 255, 240, 0, interfaceCtx->cRightAlpha);
+#else
     OVERLAY_DISP = Gfx_DrawRect_DropShadow(
         OVERLAY_DISP, sBCButtonXPositions[EQUIP_SLOT_C_RIGHT], sBCButtonYPositions[EQUIP_SLOT_C_RIGHT],
         sBCButtonSizes[EQUIP_SLOT_C_RIGHT], sBCButtonSizes[EQUIP_SLOT_C_RIGHT], sBCButtonScales[EQUIP_SLOT_C_RIGHT] * 2,
         sBCButtonScales[EQUIP_SLOT_C_RIGHT] * 2, 255, 240, 0, interfaceCtx->cRightAlpha);
+#endif
 
     if (!IS_PAUSE_STATE_GAMEOVER(pauseCtx)) {
         if (IS_PAUSED(&play->pauseCtx)) {
@@ -4088,7 +4256,11 @@ void Interface_DrawItemButtons(PlayState* play) {
                 temp = interfaceCtx->aAlpha;
             }
 
+#ifdef LINUX
+            Interface_DrawSelectPill(play, 255, 240, 0, temp);
+#else
             OVERLAY_DISP = Gfx_DrawRect_DropShadow(OVERLAY_DISP, 254, 16, 16, 16, 2 << 10, 2 << 10, 255, 240, 0, temp);
+#endif
 
             gDPPipeSync(OVERLAY_DISP++);
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, temp);
@@ -4098,8 +4270,15 @@ void Interface_DrawItemButtons(PlayState* play) {
             gDPLoadTextureBlock_4b(OVERLAY_DISP++, sCUpLabelTextures[gSaveContext.options.language], G_IM_FMT_IA, 32,
                                    12, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK,
                                    G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+#ifdef LINUX
+            // Centred on the Select pill
+            gSPTextureRectangle(OVERLAY_DISP++, (S30_C_UP_BUTTON_X - 16) << 2, (S30_C_UP_BUTTON_Y - 6) << 2,
+                                (S30_C_UP_BUTTON_X + 16) << 2, (S30_C_UP_BUTTON_Y + 6) << 2, G_TX_RENDERTILE, 0, 0,
+                                1 << 10, 1 << 10);
+#else
             gSPTextureRectangle(OVERLAY_DISP++, 247 << 2, 18 << 2, (247 + 32) << 2, (18 + 12) << 2, G_TX_RENDERTILE, 0,
                                 0, 1 << 10, 1 << 10);
+#endif
         }
 
         sCUpTimer--;
@@ -4133,10 +4312,17 @@ void Interface_DrawItemButtons(PlayState* play) {
 
 void Interface_DrawItemIconTexture(PlayState* play, TexturePtr texture, s16 button) {
     static s16 sItemIconTextureDimensions[] = {
+#ifdef LINUX
+        24,                // EQUIP_SLOT_B
+        24,                // EQUIP_SLOT_C_LEFT
+        24,                // EQUIP_SLOT_C_DOWN
+        S30_SHOULDER_ICON, // EQUIP_SLOT_C_RIGHT
+#else
         30, // EQUIP_SLOT_B
         24, // EQUIP_SLOT_C_LEFT
         24, // EQUIP_SLOT_C_DOWN
         24, // EQUIP_SLOT_C_RIGHT
+#endif
     };
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -4154,8 +4340,16 @@ void Interface_DrawItemIconTexture(PlayState* play, TexturePtr texture, s16 butt
 }
 
 void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha) {
+#ifdef LINUX
+    // Bottom left of each button, as in ports/oot; C-right on the shoulder pill
+    static s16 sAmmoDigitsXPositions[] = { S30_B_BUTTON_X + 1, S30_C_LEFT_BUTTON_X + 1, S30_C_DOWN_BUTTON_X + 1,
+                                           S30_SHOULDER_ICON_X + 1 };
+    static s16 sAmmoDigitsYPositions[] = { S30_B_BUTTON_Y + 17, S30_C_LEFT_BUTTON_Y + 17, S30_C_DOWN_BUTTON_Y + 17,
+                                           S30_SHOULDER_Y + S30_SHOULDER_H - 8 };
+#else
     static s16 sAmmoDigitsXPositions[] = { 162, 228, 250, 272 };
     static s16 sAmmoDigitsYPositions[] = { 35, 35, 51, 35 };
+#endif
     u8 i;
     u16 ammo;
 
@@ -4379,7 +4573,13 @@ void Interface_DrawAButton(PlayState* play) {
 
     Gfx_SetupDL42_Overlay(play->state.gfxCtx);
 
+#ifdef LINUX
+    Interface_SetPerspectiveView(play, S30_A_BUTTON_Y + 2 + R_A_BTN_Y_OFFSET,
+                                 S30_A_BUTTON_Y + 2 + S30_A_BUTTON_VIEW + R_A_BTN_Y_OFFSET, S30_A_BUTTON_X + 2,
+                                 S30_A_BUTTON_X + 2 + S30_A_BUTTON_VIEW);
+#else
     Interface_SetPerspectiveView(play, 25 + R_A_BTN_Y_OFFSET, 70 + R_A_BTN_Y_OFFSET, 192, 237);
+#endif
 
     gSPClearGeometryMode(OVERLAY_DISP++, G_CULL_BOTH);
     gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
@@ -4399,14 +4599,26 @@ void Interface_DrawAButton(PlayState* play) {
 
     // Draw A Button Colored
     gDPPipeSync(OVERLAY_DISP++);
+#ifdef LINUX
+    Interface_SetPerspectiveView(play, S30_A_BUTTON_Y + R_A_BTN_Y_OFFSET,
+                                 S30_A_BUTTON_Y + S30_A_BUTTON_VIEW + R_A_BTN_Y_OFFSET, S30_A_BUTTON_X,
+                                 S30_A_BUTTON_X + S30_A_BUTTON_VIEW);
+#else
     Interface_SetPerspectiveView(play, 23 + R_A_BTN_Y_OFFSET, 68 + R_A_BTN_Y_OFFSET, 190, 235);
+#endif
     gSPVertex(OVERLAY_DISP++, &interfaceCtx->actionVtx[0], 4, 0);
     gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 100, 200, 255, interfaceCtx->aAlpha);
     gSP1Quadrangle(OVERLAY_DISP++, 0, 2, 3, 1, 0);
 
     // Draw A Button Do-Action
     gDPPipeSync(OVERLAY_DISP++);
+#ifdef LINUX
+    Interface_SetPerspectiveView(play, S30_A_BUTTON_Y + R_A_BTN_Y_OFFSET,
+                                 S30_A_BUTTON_Y + S30_A_BUTTON_VIEW + R_A_BTN_Y_OFFSET, S30_A_BUTTON_X,
+                                 S30_A_BUTTON_X + S30_A_BUTTON_VIEW);
+#else
     Interface_SetPerspectiveView(play, 23 + R_A_BTN_Y_OFFSET, 68 + R_A_BTN_Y_OFFSET, 190, 235);
+#endif
     gSPSetGeometryMode(OVERLAY_DISP++, G_CULL_BACK);
     gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
                       ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);

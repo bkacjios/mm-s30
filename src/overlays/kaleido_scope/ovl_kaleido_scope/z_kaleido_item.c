@@ -699,8 +699,16 @@ void KaleidoScope_UpdateItemCursor(PlayState* play) {
     }
 }
 
+#ifdef LINUX
+// The C buttons moved on the HUD (z_parameter.c): same screen-to-page mapping
+// as the N64 values (centre x: 660 + 10.9 per pixel from 240.5, centre y:
+// 1100 - 11.25 per pixel from 31.5); C-right is the shoulder pill's icon
+s16 sCButtonPosX[] = { 856, 1096, 1265 };
+s16 sCButtonPosY[] = { 1280, 1044, 1308 };
+#else
 s16 sCButtonPosX[] = { 660, 900, 1140 };
 s16 sCButtonPosY[] = { 1100, 920, 1100 };
+#endif
 
 void KaleidoScope_UpdateItemEquip(PlayState* play) {
     static s16 sEquipMagicArrowBowSlotHoldTimer = 0;
