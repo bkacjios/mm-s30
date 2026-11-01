@@ -1794,6 +1794,33 @@ void Environment_Update(PlayState* play, EnvironmentContext* envCtx, LightContex
     }
 }
 
+#ifdef LINUX
+/*
+ * The sun is one 64x64 i4 texture (gSun1Tex continues through gSun2Tex and
+ * gSun3Tex; the evening one likewise), but gSunDL draws it as three I8
+ * strips: read that way the texture shows two half-width suns side by side
+ * in each strip. Drawn here as one i4 quad instead, as 2Ship2Harkinian does.
+ */
+static Vtx sSunVtx[] = {
+    VTX(-31, -31, 0, 0, 0, 255, 255, 255, 255),
+    VTX(32, -31, 0, 2016, 0, 255, 255, 255, 255),
+    VTX(-31, 32, 0, 0, 2016, 255, 255, 255, 255),
+    VTX(32, 32, 0, 2016, 2016, 255, 255, 255, 255),
+};
+
+static Gfx sSunDL[] = {
+    gsSPMatrix(0x01000000, G_MTX_NOPUSH | G_MTX_MUL | G_MTX_MODELVIEW),
+    gsDPPipeSync(),
+    gsDPLoadTextureBlock_4b(gSun1Tex, G_IM_FMT_I, 64, 64, 0, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP,
+                            6, 6, G_TX_NOLOD, G_TX_NOLOD),
+    gsDPLoadMultiBlock_4b(gSunEvening1Tex, 0x0100, 1, G_IM_FMT_I, 64, 64, 0, G_TX_NOMIRROR | G_TX_CLAMP,
+                          G_TX_NOMIRROR | G_TX_CLAMP, 6, 6, G_TX_NOLOD, G_TX_NOLOD),
+    gsSPVertex(sSunVtx, 4, 0),
+    gsSP2Triangles(0, 1, 2, 0, 2, 1, 3, 0),
+    gsSPEndDisplayList(),
+};
+#endif
+
 void Environment_DrawSun(PlayState* play) {
     if (!play->envCtx.sunDisabled) {
         OPEN_DISPS(play->state.gfxCtx);
@@ -1815,7 +1842,11 @@ void Environment_DrawSun(PlayState* play) {
             Matrix_Scale(sSunScale, sSunScale, sSunScale, MTXMODE_APPLY);
             MATRIX_FINALIZE_AND_LOAD(POLY_OPA_DISP++, play->state.gfxCtx);
             Gfx_SetupDL54_Opa(play->state.gfxCtx);
+#ifdef LINUX
+            gSPDisplayList(POLY_OPA_DISP++, sSunDL);
+#else
             gSPDisplayList(POLY_OPA_DISP++, gSunDL);
+#endif
         }
 
         CLOSE_DISPS(play->state.gfxCtx);
