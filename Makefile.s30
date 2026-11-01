@@ -14,6 +14,9 @@ VERSION ?= n64-us
 # Compile with GCC (the game needs -fno-toplevel-reorder, which clang lacks)
 # against the device's musl headers; link with the project's clang/lld wrapper
 CC := arm-none-eabi-gcc
+OBJCOPY := arm-none-eabi-objcopy
+# ovl_En_Slime/z_en_slime.o -> En_Slime
+OVL_NAME = $(patsubst ovl_%,%,$(notdir $(patsubst %/,%,$(dir $@))))
 LINK := $(WORK)/bin/armv7-clang
 
 TARGET_FLAGS := -marm -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 \
@@ -83,6 +86,15 @@ $(BUILD_DIR)/src/%.o: src/%.c
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c $< -o $@ 2> $@.err || { echo "FAIL $<"; false; }
 	@rm -f $@.err
+
+# Actor overlays are linked in, so their statics would outlive the overlay: each
+# one's .data and .bss get their own sections (ovl_data_<name>, ovl_bss_<name>),
+# which the game resets whenever the overlay loads again, as Overlay_Load would
+$(BUILD_DIR)/src/overlays/actors/%.o: src/overlays/actors/%.c
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) -c $< -o $@ 2> $@.err || { echo "FAIL $<"; false; }
+	@rm -f $@.err
+	@$(OBJCOPY) --rename-section .data=ovl_data_$(OVL_NAME) --rename-section .bss=ovl_bss_$(OVL_NAME) $@
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)

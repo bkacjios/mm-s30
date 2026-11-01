@@ -103,6 +103,81 @@ uintptr_t ActorOverlayTable_FaultAddrConv(uintptr_t address, void* param) {
     return 0;
 }
 
+#ifdef LINUX
+/*
+ * Overlay statics. On the N64 an overlay's .data and .bss come fresh from ROM
+ * each time it is loaded (first instance spawned after the last one went), and
+ * actors rely on it: e.g. En_Slime converts its texture pointers once per
+ * load into the object's current address. Here actors are linked in, so the
+ * build puts each overlay's .data and .bss in sections of its own
+ * (Makefile.s30) and they are reset on load: .data from a copy taken the first
+ * time, .bss zeroed.
+ */
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct OverlayStatics {
+    u8* data;
+    u8* dataEnd;
+    u8* bss;
+    u8* bssEnd;
+} OverlayStatics;
+
+#define DEFINE_ACTOR(name, _enumValue, _allocType, _debugName)                                   \
+    extern u8 __start_ovl_data_##name[] __attribute__((weak));                                   \
+    extern u8 __stop_ovl_data_##name[] __attribute__((weak));                                    \
+    extern u8 __start_ovl_bss_##name[] __attribute__((weak));                                    \
+    extern u8 __stop_ovl_bss_##name[] __attribute__((weak));
+#define DEFINE_ACTOR_INTERNAL(_name, _enumValue, _allocType, _debugName)
+#define DEFINE_ACTOR_UNSET(_enumValue)
+#include "tables/actor_table.h"
+#undef DEFINE_ACTOR
+#undef DEFINE_ACTOR_INTERNAL
+#undef DEFINE_ACTOR_UNSET
+
+#define DEFINE_ACTOR(name, _enumValue, _allocType, _debugName) \
+    { __start_ovl_data_##name, __stop_ovl_data_##name, __start_ovl_bss_##name, __stop_ovl_bss_##name },
+#define DEFINE_ACTOR_INTERNAL(_name, _enumValue, _allocType, _debugName) { 0 },
+#define DEFINE_ACTOR_UNSET(_enumValue) { 0 },
+static const OverlayStatics sOverlayStatics[] = {
+#include "tables/actor_table.h"
+};
+#undef DEFINE_ACTOR
+#undef DEFINE_ACTOR_INTERNAL
+#undef DEFINE_ACTOR_UNSET
+
+static u8* sOverlayDataCopy[ACTOR_ID_MAX];
+static u8 sOverlayLoaded[ACTOR_ID_MAX];
+
+void ActorOverlayTable_LoadStatics(ActorId id) {
+    const OverlayStatics* ovl = &sOverlayStatics[id];
+    size_t dataSize = ovl->dataEnd - ovl->data;
+
+    if (sOverlayLoaded[id]) {
+        return;
+    }
+    sOverlayLoaded[id] = true;
+    if (dataSize != 0) {
+        if (sOverlayDataCopy[id] == NULL) {
+            // First load: .data is still as linked
+            sOverlayDataCopy[id] = malloc(dataSize);
+            if (sOverlayDataCopy[id] != NULL) {
+                memcpy(sOverlayDataCopy[id], ovl->data, dataSize);
+            }
+        } else {
+            memcpy(ovl->data, sOverlayDataCopy[id], dataSize);
+        }
+    }
+    if (ovl->bssEnd != ovl->bss) {
+        memset(ovl->bss, 0, ovl->bssEnd - ovl->bss);
+    }
+}
+
+void ActorOverlayTable_UnloadStatics(ActorId id) {
+    sOverlayLoaded[id] = false;
+}
+#endif
+
 void ActorOverlayTable_Init(void) {
     gMaxActorId = ACTOR_ID_MAX;
     Fault_AddClient(&sActorOverlayTableFaultClient, ActorOverlayTable_FaultClient, NULL, NULL);
@@ -110,6 +185,9 @@ void ActorOverlayTable_Init(void) {
 }
 
 void ActorOverlayTable_Cleanup(void) {
+#ifdef LINUX
+    memset(sOverlayLoaded, 0, sizeof(sOverlayLoaded)); // the play state's arena goes, every overlay with it
+#endif
     Fault_RemoveClient(&sActorOverlayTableFaultClient);
     Fault_RemoveAddrConvClient(&sActorOverlayTableFaultAddrConvClient);
     gMaxActorId = 0;

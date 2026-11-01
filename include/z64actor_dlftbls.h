@@ -48,6 +48,10 @@ typedef struct ActorOverlay {
 
 void ActorOverlayTable_Init(void);
 void ActorOverlayTable_Cleanup(void);
+#ifdef LINUX
+void ActorOverlayTable_LoadStatics(ActorId id);
+void ActorOverlayTable_UnloadStatics(ActorId id);
+#endif
 
 extern ActorOverlay gActorOverlayTable[ACTOR_ID_MAX];
 extern ActorId gMaxActorId;

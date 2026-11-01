@@ -3529,9 +3529,15 @@ Actor* Actor_SpawnAsChildAndCutscene(ActorContext* actorCtx, PlayState* play, s1
     }
 
     overlayEntry = &gActorOverlayTable[index];
+#ifdef LINUX
+    // Linked-in overlays: count instances anyway, for their statics
+    overlayEntry->numLoaded++;
+    ActorOverlayTable_LoadStatics(index);
+#else
     if (overlayEntry->vramStart != NULL) {
         overlayEntry->numLoaded++;
     }
+#endif
 
     PRINTF(T("アクタークライアントは %d 個目です\n", "Actor client No. %d\n"), overlayEntry->numLoaded);
 
@@ -3683,12 +3689,21 @@ Actor* Actor_Delete(ActorContext* actorCtx, Actor* actor, PlayState* play) {
     newHead = Actor_RemoveFromCategory(play, actorCtx, actor);
     ZeldaArena_Free(actor);
 
+#ifdef LINUX
+    // The last instance gone frees the overlay (a permanent one stays until
+    // the play state ends: ActorOverlayTable_Cleanup)
+    overlayEntry->numLoaded--;
+    if ((overlayEntry->numLoaded == 0) && !(overlayEntry->allocType & ALLOCTYPE_PERMANENT)) {
+        ActorOverlayTable_UnloadStatics(overlayEntry - gActorOverlayTable);
+    }
+#else
     if (overlayEntry->vramStart == NULL) {
         PRINTF(T("オーバーレイではありません\n", "Not an overlay\n"));
     } else {
         overlayEntry->numLoaded--;
         Actor_FreeOverlay(overlayEntry);
     }
+#endif
 
     return newHead;
 }
