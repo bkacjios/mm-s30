@@ -3763,7 +3763,7 @@ bool Player_ItemIsItemAction(Player* this, ItemId item, PlayerItemAction itemAct
 EquipSlot func_8082FD0C(Player* this, PlayerItemAction itemAction) {
     s32 btn;
 
-    for (btn = EQUIP_SLOT_C_LEFT; btn <= EQUIP_SLOT_C_RIGHT; btn++) {
+    for (btn = EQUIP_SLOT_C_LEFT; btn < BUTTON_ITEM_MAX; btn++) { // S30: and the D-pad
         if (Player_ItemIsItemAction(this, GET_CUR_FORM_BTN_ITEM(btn), itemAction)) {
             return btn;
         }
@@ -3773,10 +3773,8 @@ EquipSlot func_8082FD0C(Player* this, PlayerItemAction itemAction) {
 }
 
 u16 sPlayerItemButtons[] = {
-    BTN_B,
-    BTN_CLEFT,
-    BTN_CDOWN,
-    BTN_CRIGHT,
+    BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
+    BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT, // S30: the D-pad item slots (DPAD_BTN)
 };
 
 // Return currently-pressed button, in order of priority B, CLEFT, CDOWN, CRIGHT.
@@ -3790,6 +3788,74 @@ EquipSlot func_8082FDC4(void) {
     }
 
     return i;
+}
+
+/**
+ * S30: R while aiming the bow cycles the nocked arrow among normal, fire, ice and light (those owned), as 2 Ship 2
+ * Harkinian's arrow cycle: the arrow goes back (a magic one's magic with it) and Link nocks the next kind.
+ */
+static s8 sArrowCycleFrames = 0; // R stays off for a moment after, so that holding it doesn't raise the shield
+
+static s32 Player_TryCycleArrow(Player* this, PlayState* play) {
+    static const s8 sCycleOrder[] = { PLAYER_IA_BOW, PLAYER_IA_BOW_FIRE, PLAYER_IA_BOW_ICE, PLAYER_IA_BOW_LIGHT };
+    static const u8 sMagicArrowCosts[] = { 4, 4, 8 };
+    EnArrow* arrow = (EnArrow*)this->heldActor;
+    s32 i;
+    s32 cur = 0;
+    s32 next = PLAYER_IA_BOW;
+    s32 bowItem;
+
+    if (((gSaveContext.minigameStatus == MINIGAME_STATUS_ACTIVE) &&
+         ((play->sceneId == SCENE_SYATEKI_MIZU) || (play->sceneId == SCENE_SYATEKI_MORI) ||
+          (play->sceneId == SCENE_20SICHITAI2))) ||
+        gHorseIsMounted || (this->rideActor != NULL) || (INV_CONTENT(ITEM_BOW) != ITEM_BOW) ||
+        ((INV_CONTENT(ITEM_ARROW_FIRE) != ITEM_ARROW_FIRE) && (INV_CONTENT(ITEM_ARROW_ICE) != ITEM_ARROW_ICE) &&
+         (INV_CONTENT(ITEM_ARROW_LIGHT) != ITEM_ARROW_LIGHT)) ||
+        (this->heldItemAction < PLAYER_IA_BOW) || (this->heldItemAction > PLAYER_IA_BOW_LIGHT) ||
+        ((this->unk_AA5 != PLAYER_UNKAA5_3) && (this->upperActionFunc != Player_UpperAction_7)) || (arrow == NULL) ||
+        (arrow->actor.id != ACTOR_EN_ARROW) || ((this->stateFlags3 & PLAYER_STATE3_40) && (this->unk_ACE == 0))) {
+        return false;
+    }
+
+    for (i = 0; i < ARRAY_COUNT(sCycleOrder); i++) {
+        if (sCycleOrder[i] == this->heldItemAction) {
+            cur = i;
+        }
+    }
+    for (i = 1; i < ARRAY_COUNT(sCycleOrder); i++) {
+        s32 ia = sCycleOrder[(cur + i) % ARRAY_COUNT(sCycleOrder)];
+
+        if ((ia == PLAYER_IA_BOW) || ((ia == PLAYER_IA_BOW_FIRE) && (INV_CONTENT(ITEM_ARROW_FIRE) == ITEM_ARROW_FIRE)) ||
+            ((ia == PLAYER_IA_BOW_ICE) && (INV_CONTENT(ITEM_ARROW_ICE) == ITEM_ARROW_ICE)) ||
+            ((ia == PLAYER_IA_BOW_LIGHT) && (INV_CONTENT(ITEM_ARROW_LIGHT) == ITEM_ARROW_LIGHT))) {
+            next = ia;
+            break;
+        }
+    }
+
+    // The nocked arrow goes back; Link nocks the next kind (Player_InitItemAction)
+    if (ARROW_IS_MAGICAL(arrow->actor.params)) {
+        Magic_Add(play, sMagicArrowCosts[ARROW_GET_MAGIC_FROM_TYPE(arrow->actor.params)]);
+    }
+    if (arrow->actor.child != NULL) {
+        Actor_Kill(arrow->actor.child);
+    }
+    Actor_Kill(&arrow->actor);
+    Player_InitItemAction(play, this, next);
+
+    // And the bow on the item buttons
+    bowItem = (next == PLAYER_IA_BOW) ? ITEM_BOW : ITEM_BOW_FIRE + (next - PLAYER_IA_BOW_FIRE);
+    for (i = EQUIP_SLOT_C_LEFT; i < BUTTON_ITEM_MAX; i++) {
+        if ((GET_CUR_FORM_BTN_ITEM(i) == ITEM_BOW) ||
+            ((GET_CUR_FORM_BTN_ITEM(i) >= ITEM_BOW_FIRE) && (GET_CUR_FORM_BTN_ITEM(i) <= ITEM_BOW_LIGHT))) {
+            SET_CUR_FORM_BTN_ITEM(i, bowItem);
+            SET_CUR_FORM_BTN_SLOT(i, SLOT_BOW);
+            Interface_LoadItemIcon(play, i);
+            BUTTON_STATUS(i) = BTN_ENABLED;
+        }
+    }
+    Audio_PlaySfx(NA_SE_PL_CHANGE_ARMS);
+    return true;
 }
 
 /**
@@ -3838,14 +3904,18 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
           (Player_ItemIsInUse(this, (IREG(1) != 0) ? ITEM_FISHING_ROD : Inventory_GetBtnBItem(play)) ||
            Player_ItemIsInUse(this, C_BTN_ITEM(EQUIP_SLOT_C_LEFT)) ||
            Player_ItemIsInUse(this, C_BTN_ITEM(EQUIP_SLOT_C_DOWN)) ||
-           Player_ItemIsInUse(this, C_BTN_ITEM(EQUIP_SLOT_C_RIGHT))))) {
+           Player_ItemIsInUse(this, C_BTN_ITEM(EQUIP_SLOT_C_RIGHT)) ||
+           Player_ItemIsInUse(this, ITEM_BTN_ITEM(DPAD_BTN(0))) || Player_ItemIsInUse(this, ITEM_BTN_ITEM(DPAD_BTN(1))) ||
+           Player_ItemIsInUse(this, ITEM_BTN_ITEM(DPAD_BTN(2))) ||
+           Player_ItemIsInUse(this, ITEM_BTN_ITEM(DPAD_BTN(3)))))) {
         Player_UseItem(play, this, ITEM_NONE);
     } else {
         s32 pad;
         ItemId item;
         EquipSlot i = func_8082FDC4();
 
-        i = ((i >= EQUIP_SLOT_A) && (this->transformation == PLAYER_FORM_FIERCE_DEITY) &&
+        // (none pressed: past the D-pad too, S30)
+        i = ((i >= BUTTON_ITEM_MAX) && (this->transformation == PLAYER_FORM_FIERCE_DEITY) &&
              (this->heldItemAction != PLAYER_IA_SWORD_TWO_HANDED))
                 ? EQUIP_SLOT_B
                 : i;
@@ -12688,6 +12758,17 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         var_v1 = Play_InCsMode(play);
         sSavedCurrentMask = this->currentMask;
         if (!(this->stateFlags3 & PLAYER_STATE3_4)) {
+            // S30: R cycles arrows while aiming, instead of shielding or leaving first person
+            if ((this->actor.id == ACTOR_PLAYER) && (input != NULL)) {
+                if (CHECK_BTN_ALL(input->press.button, BTN_R) && Player_TryCycleArrow(this, play)) {
+                    sArrowCycleFrames = 2;
+                }
+                if (sArrowCycleFrames > 0) {
+                    sArrowCycleFrames--;
+                    input->cur.button &= ~BTN_R;
+                    input->press.button &= ~BTN_R;
+                }
+            }
             this->actionFunc(this, play);
         }
 
@@ -13725,6 +13806,10 @@ s32 Player_ActionHandler_7(Player* this, PlayState* play) {
     return true;
 }
 
+// S30: Elegy of Emptiness played (Player_Action_88): no transformation flash, the shell at once (as 2 Ship 2
+// Harkinian's faster song playback)
+static s32 sElegyQuick = false;
+
 // elegy of emptiness
 void func_80848640(PlayState* play, Player* this) {
     EnTorch2* torch2;
@@ -13745,6 +13830,14 @@ void func_80848640(PlayState* play, Player* this) {
     if (torch2 != NULL) {
         play->actorCtx.elegyShells[this->transformation] = torch2;
         Play_SetupRespawnPoint(play, this->transformation + 3, PLAYER_PARAMS(0xFF, PLAYER_START_MODE_B));
+    }
+
+    if (sElegyQuick) {
+        if (torch2 != NULL) {
+            torch2->framesUntilNextState = 1;
+        }
+        Player_PlaySfx(this, NA_SE_PL_TRANSFORM);
+        return;
     }
 
     effChange = Actor_Spawn(&play->actorCtx, play, ACTOR_EFF_CHANGE, this->actor.world.pos.x, this->actor.world.pos.y,
@@ -17479,9 +17572,15 @@ void Player_Action_63(Player* this, PlayState* play) {
                     CutsceneManager_Stop(play->playerCsIds[PLAYER_CS_ID_ITEM_OCARINA]);
                     this->actor.flags &= ~ACTOR_FLAG_OCARINA_INTERACTION;
 
-                    actor = Actor_Spawn(&play->actorCtx, play, var_v1 ? ACTOR_EN_TEST7 : ACTOR_EN_TEST6,
-                                        this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, 0, 0,
-                                        0, play->msgCtx.ocarinaMode);
+                    if (var_v1) {
+                        // S30: no Song of Soaring cutscene, straight to the warp
+                        EnTest7_StartWarp(play, play->msgCtx.ocarinaMode);
+                        actor = NULL;
+                    } else {
+                        actor = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_TEST6, this->actor.world.pos.x,
+                                            this->actor.world.pos.y, this->actor.world.pos.z, 0, 0, 0,
+                                            play->msgCtx.ocarinaMode);
+                    }
                     if (actor != NULL) {
                         this->stateFlags1 &= ~PLAYER_STATE1_20000000;
                         this->csAction = PLAYER_CSACTION_NONE;
@@ -18745,7 +18844,10 @@ void Player_Action_88(Player* this, PlayState* play) {
         play->msgCtx.ocarinaMode = OCARINA_MODE_END;
         func_8085B384(this, play);
     } else if (this->av2.actionVar2 == 10) {
+        sElegyQuick = true;
         func_80848640(play, this);
+        sElegyQuick = false;
+        this->av2.actionVar2 = 90; // S30: done in a few frames, not 80 more
     }
 }
 

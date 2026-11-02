@@ -356,7 +356,7 @@ void LifeMeter_Draw(PlayState* play) {
                                   ENVIRONMENT, PRIMITIVE, TEXEL0, PRIMITIVE, TEXEL0, 0, PRIMITIVE, 0);
             }
             posY = 26.0f + offsetY;
-            posX = 30.0f + offsetX;
+            posX = 30.0f + S30_HUD_LEFT + offsetX;
             temp_f4 = 1.0f;
             temp_f4 /= 0.68f;
             temp_f4 *= 1 << 10;
@@ -387,7 +387,7 @@ void LifeMeter_Draw(PlayState* play) {
             }
             mtx = GRAPH_ALLOC(gfxCtx, sizeof(Mtx));
             Mtx_SetTranslateScaleMtx(mtx, 1.0f - (0.32f * lifesize), 1.0f - (0.32f * lifesize),
-                                     1.0f - (0.32f * lifesize), -130.0f + offsetX, 94.5f - offsetY, 0.0f);
+                                     1.0f - (0.32f * lifesize), -130.0f + S30_HUD_LEFT + offsetX, 94.5f - offsetY, 0.0f);
             gSPMatrix(OVERLAY_DISP++, mtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
             gSPVertex(OVERLAY_DISP++, beatingHeartVtx, 4, 0);
             gSP1Quadrangle(OVERLAY_DISP++, 0, 2, 3, 1, 0);

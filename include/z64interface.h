@@ -12,6 +12,17 @@
 
 // TODO extract this information from the texture definitions themselves
 // 32x32 RGBA32
+#ifdef LINUX
+// S30: HUD at the sides moved out into the widescreen margin (gfx.c WIDE_PAD, 20 px each side), by as much as the
+// shoulder pill sits in from the right edge (22 px): hearts, magic, rupees, keys and timers left, the minimap right.
+// As in ports/oot.
+#define S30_HUD_LEFT (-16)
+#define S30_HUD_RIGHT 16
+#else
+#define S30_HUD_LEFT 0
+#define S30_HUD_RIGHT 0
+#endif
+
 #define ICON_ITEM_TEX_WIDTH  32
 #define ICON_ITEM_TEX_HEIGHT 32
 #define ICON_ITEM_TEX_SIZE ((ICON_ITEM_TEX_WIDTH * ICON_ITEM_TEX_HEIGHT) * 4)

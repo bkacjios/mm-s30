@@ -747,8 +747,12 @@ s32 func_801235DC(PlayState* play, f32 arg1, s16 arg2) {
 }
 
 ItemId Player_GetItemOnButton(PlayState* play, Player* player, EquipSlot slot) {
-    if (slot >= EQUIP_SLOT_A) {
+    if (slot >= BUTTON_ITEM_MAX) {
         return ITEM_NONE;
+    }
+
+    if (slot >= 4) {
+        return ITEM_BTN_ITEM(slot); // S30: D-pad item slots (DPAD_BTN)
     }
 
     if (slot == EQUIP_SLOT_B) {
@@ -790,9 +794,8 @@ ItemId Player_GetItemOnButton(PlayState* play, Player* player, EquipSlot slot) {
 }
 
 u16 sCItemButtons[] = {
-    BTN_CLEFT,
-    BTN_CDOWN,
-    BTN_CRIGHT,
+    BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
+    BTN_DUP,   BTN_DDOWN, BTN_DLEFT,  BTN_DRIGHT, // S30: the D-pad item slots too
 };
 
 PlayerItemAction func_80123810(PlayState* play) {

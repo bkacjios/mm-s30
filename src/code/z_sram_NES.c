@@ -547,7 +547,7 @@ void Sram_SaveEndOfCycle(PlayState* play) {
         // Check for all bottled items
         if (gSaveContext.save.saveInfo.inventory.items[i] >= ITEM_POTION_RED) {
             if (gSaveContext.save.saveInfo.inventory.items[i] <= ITEM_OBABA_DRINK) {
-                for (j = EQUIP_SLOT_C_LEFT; j <= EQUIP_SLOT_C_RIGHT; j++) {
+                for (j = EQUIP_SLOT_C_LEFT; j < BUTTON_ITEM_MAX; j++) {
                     if (GET_CUR_FORM_BTN_ITEM(j) == gSaveContext.save.saveInfo.inventory.items[i]) {
                         SET_CUR_FORM_BTN_ITEM(j, ITEM_BOTTLE);
                         Interface_LoadItemIconImpl(play, j);
@@ -615,7 +615,7 @@ void Sram_SaveEndOfCycle(PlayState* play) {
     Inventory_DeleteItem(ITEM_SLINGSHOT, SLOT_TRADE_KEY_MAMA);
     Inventory_DeleteItem(ITEM_LONGSHOT, SLOT_TRADE_COUPLE);
 
-    for (j = EQUIP_SLOT_C_LEFT; j <= EQUIP_SLOT_C_RIGHT; j++) {
+    for (j = EQUIP_SLOT_C_LEFT; j < BUTTON_ITEM_MAX; j++) {
         if ((GET_CUR_FORM_BTN_ITEM(j) >= ITEM_MOONS_TEAR) && (GET_CUR_FORM_BTN_ITEM(j) <= ITEM_PENDANT_OF_MEMORIES)) {
             SET_CUR_FORM_BTN_ITEM(j, ITEM_NONE);
             Interface_LoadItemIconImpl(play, j);
@@ -921,6 +921,21 @@ u16 sSaveDefaultChecksum = 0;
  *  Initialize new save.
  *  This save has an empty inventory with 3 hearts, sword and shield.
  */
+/**
+ * S30: empty D-pad item slots for a save made before they existed (or a new one), whose bytes are zero
+ */
+static void Sram_InitDpadItems(void) {
+    s32 i;
+
+    if (gSaveContext.save.saveInfo.dpadSet != DPAD_SET) {
+        for (i = 0; i < 4; i++) {
+            gSaveContext.save.saveInfo.dpadItems[i] = ITEM_NONE;
+            gSaveContext.save.saveInfo.dpadSlots[i] = SLOT_NONE;
+        }
+        gSaveContext.save.saveInfo.dpadSet = DPAD_SET;
+    }
+}
+
 void Sram_InitNewSave(void) {
     gSaveContext.save.playerForm = PLAYER_FORM_HUMAN;
     gSaveContext.save.eventDayCount = 0;
@@ -943,6 +958,7 @@ void Sram_InitNewSave(void) {
     gSaveContext.nextCutsceneIndex = 0;
     gSaveContext.save.saveInfo.playerData.magicLevel = 0;
     Sram_GenerateRandomSaveFields();
+    Sram_InitDpadItems(); // S30
 }
 
 SavePlayerData sSaveDebugPlayerData = {
@@ -1163,6 +1179,7 @@ void Sram_InitDebugSave(void) {
     gSaveContext.save.saveInfo.playerData.magicLevel = 0;
 
     Sram_GenerateRandomSaveFields();
+    Sram_InitDpadItems(); // S30
 }
 
 void Sram_ResetSaveFromMoonCrash(SramContext* sramCtx) {
@@ -1210,6 +1227,7 @@ void Sram_ResetSaveFromMoonCrash(SramContext* sramCtx) {
     gSaveContext.powderKegTimer = 0;
     gSaveContext.unk_1014 = 0;
     gSaveContext.jinxTimer = 0;
+    Sram_InitDpadItems(); // S30
 }
 
 static u16 sOwlWarpEntrances[OWL_WARP_MAX - 1] = {
@@ -1322,6 +1340,7 @@ void Sram_OpenSave(FileSelectState* fileSelect, SramContext* sramCtx) {
         fileNum = gSaveContext.fileNum;
         func_80147314(sramCtx, fileNum);
     }
+    Sram_InitDpadItems(); // S30
 }
 
 // Similar to func_80145698, but accounts for owl saves?

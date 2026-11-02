@@ -125,7 +125,7 @@ void EnTorch2_Update(Actor* thisx, PlayState* play) {
             CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
             targetAlpha = 255;
         }
-        Math_StepToS(&this->alpha, targetAlpha, 8);
+        Math_StepToS(&this->alpha, targetAlpha, 24); // S30: 8, faster with the Elegy's flash skipped (z_player.c)
     }
 }
 

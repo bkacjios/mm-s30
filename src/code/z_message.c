@@ -5312,6 +5312,155 @@ s16 sDoubleTimeSkipToDayTextIds[] = {
     0x1B8E, // Dawn of final day
 };
 
+/**
+ * S30: the Song of Double Time takes Link to a day and time picked on the three-day clock, as 2 Ship 2 Harkinian's
+ * better Song of Double Time: the stick or D-pad left/right moves it (the D-pad by half an hour, the stick by up to
+ * half an hour, Z slower, R faster), A goes there, B cancels. From now up to the final hour (5:00 on the final day).
+ */
+#define CLOCK_TIME_NORMALIZED(time) ((u16)((time) - CLOCK_TIME(6, 0))) // 6:00 is 0
+#define CLOCK_TIME_MINUTE_F (CLOCK_TIME(0, 1) * 1.0f)
+
+static s32 sDoubleTimePicking = false;
+static u16 sDoubleTimeOrigTime;
+static s32 sDoubleTimeOrigDay;
+static u16 sDoubleTimeTime;
+static s32 sDoubleTimeDay;
+
+void Message_StartDoubleTimePicker(PlayState* play) {
+    Interface_SetAButtonDoAction(play, DO_ACTION_DECIDE);
+    Interface_SetHudVisibility(HUD_VISIBILITY_A_B);
+    play->msgCtx.ocarinaMode = OCARINA_MODE_PROCESS_DOUBLE_TIME;
+    sDoubleTimePicking = true;
+    sDoubleTimeOrigTime = sDoubleTimeTime = CURRENT_TIME;
+    sDoubleTimeOrigDay = sDoubleTimeDay = gSaveContext.save.day;
+}
+
+/**
+ * Whether the picker is up, and the day and time it shows on the clock
+ */
+s32 Message_GetDoubleTimePick(u16* time, s32* day) {
+    *time = sDoubleTimeTime;
+    *day = sDoubleTimeDay;
+    return sDoubleTimePicking;
+}
+
+/**
+ * Go to the picked day and time: the days between pass as they would (Sram_IncrementDay), and the last dawn or dusk
+ * is left to EnTest4 when the scene comes back after the Song of Double Time cutscene (as the original song does)
+ */
+static void Message_ApplyDoubleTime(PlayState* play) {
+    s32 night = (sDoubleTimeTime < CLOCK_TIME(6, 0)) || (sDoubleTimeTime >= CLOCK_TIME(18, 0));
+    s32 days = sDoubleTimeDay - gSaveContext.save.day;
+    s32 i;
+
+    if (night) {
+        for (i = 0; i < days; i++) {
+            Sram_IncrementDay();
+        }
+        if (days != 0) {
+            gSaveContext.save.isNight = false; // dusk still to come
+        }
+    } else if (days != 0) {
+        for (i = 1; i < days; i++) {
+            Sram_IncrementDay();
+        }
+        gSaveContext.save.isNight = true; // dawn still to come
+    }
+    gSaveContext.save.time = sDoubleTimeTime;
+    gSaveContext.timerStates[TIMER_ID_MOON_CRASH] = TIMER_STATE_OFF;
+    play->msgCtx.ocarinaMode = OCARINA_MODE_APPLY_DOUBLE_SOT;
+}
+
+static void Message_UpdateDoubleTimePicker(PlayState* play) {
+    static s8 sRepeatDir = 0;
+    static s8 sRepeatTimer = 0;
+    Input* input = CONTROLLER1(&play->state);
+    s32 dir = 0;
+    f32 interval = CLOCK_TIME_MINUTE_F * 30;
+    u16 newTime;
+
+    if (play->msgCtx.ocarinaMode != OCARINA_MODE_PROCESS_DOUBLE_TIME) {
+        sDoubleTimePicking = false; // ended some other way
+        return;
+    }
+    play->interfaceCtx.bAlpha = 255; // the clock shows at the B button's alpha
+
+    if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+        Audio_PlaySfx_MessageCancel();
+        play->msgCtx.ocarinaMode = OCARINA_MODE_END;
+        sDoubleTimePicking = false;
+        return;
+    }
+    if (CHECK_BTN_ALL(input->press.button, BTN_A) && (play->msgCtx.msgMode == MSGMODE_NONE)) {
+        Audio_PlaySfx_MessageDecide();
+        sDoubleTimePicking = false;
+        Message_ApplyDoubleTime(play);
+        return;
+    }
+
+    // D-pad: a step, then repeating after a moment
+    if (CHECK_BTN_ANY(input->cur.button, BTN_DLEFT | BTN_DRIGHT)) {
+        s32 held = CHECK_BTN_ALL(input->cur.button, BTN_DLEFT) ? -1 : 1;
+
+        if (sRepeatDir == held) {
+            if (--sRepeatTimer < 0) {
+                sRepeatTimer = 2;
+                dir = held;
+            }
+        } else {
+            sRepeatTimer = 10;
+            sRepeatDir = held;
+            dir = held;
+        }
+    } else {
+        sRepeatDir = 0;
+    }
+
+    // The stick: up to half an hour a frame
+    if (input->rel.stick_x < -5) {
+        dir = -1;
+        interval = CLOCK_TIME_MINUTE_F * CLAMP_MAX(-input->rel.stick_x / 2, 30);
+    } else if (input->rel.stick_x > 5) {
+        dir = 1;
+        interval = CLOCK_TIME_MINUTE_F * CLAMP_MAX(input->rel.stick_x / 2, 30);
+    }
+
+    if (CHECK_BTN_ALL(input->cur.button, BTN_Z)) {
+        interval /= 6;
+    } else if (CHECK_BTN_ALL(input->cur.button, BTN_R)) {
+        interval *= 2;
+    }
+
+    if (dir > 0) {
+        newTime = sDoubleTimeTime + (u16)interval;
+        // No later than the final hour
+        if ((sDoubleTimeDay == 3) && (sDoubleTimeTime < CLOCK_TIME(6, 0)) &&
+            (newTime > CLOCK_TIME(6, 0) - CLOCK_TIME_HOUR)) {
+            newTime = CLOCK_TIME(6, 0) - CLOCK_TIME_HOUR;
+            if ((sDoubleTimeOrigDay == 3) &&
+                (CLOCK_TIME_NORMALIZED(newTime) < CLOCK_TIME_NORMALIZED(sDoubleTimeOrigTime))) {
+                newTime = sDoubleTimeOrigTime;
+            }
+        }
+        if ((newTime > CLOCK_TIME(6, 0)) && (sDoubleTimeTime < CLOCK_TIME(6, 0))) {
+            sDoubleTimeDay = CLAMP(sDoubleTimeDay + 1, sDoubleTimeOrigDay, 3);
+        }
+        sDoubleTimeTime = newTime;
+    } else if (dir < 0) {
+        newTime = sDoubleTimeTime - (u16)interval;
+        // No earlier than now
+        if ((sDoubleTimeDay == sDoubleTimeOrigDay) &&
+            ((CLOCK_TIME_NORMALIZED(newTime) < CLOCK_TIME_NORMALIZED(sDoubleTimeOrigTime)) ||
+             ((u16)interval > CLOCK_TIME_NORMALIZED(sDoubleTimeTime)))) {
+            newTime = sDoubleTimeOrigTime;
+        }
+        if ((newTime < CLOCK_TIME(6, 0)) && (sDoubleTimeTime > CLOCK_TIME(6, 0))) {
+            sDoubleTimeDay = CLAMP(sDoubleTimeDay - 1, sDoubleTimeOrigDay, 3);
+        }
+        sDoubleTimeTime = newTime;
+    }
+}
+
 void Message_Update(PlayState* play) {
     static u8 D_801D0468 = 0;
     MessageContext* msgCtx = &play->msgCtx;
@@ -5330,6 +5479,10 @@ void Message_Update(PlayState* play) {
     u16 sp3E;
     s16 var_v1;
     u16 temp;
+
+    if (sDoubleTimePicking) {
+        Message_UpdateDoubleTimePicker(play); // S30
+    }
 
     msgCtx->stickAdjX = input->rel.stick_x;
     msgCtx->stickAdjY = input->rel.stick_y;
@@ -5907,13 +6060,10 @@ void Message_Update(PlayState* play) {
                     }
                 } else if (sLastPlayedSong == OCARINA_SONG_DOUBLE_TIME) {
                     if (interfaceCtx->restrictions.songOfDoubleTime == 0) {
-                        if ((CURRENT_DAY != 3) || (gSaveContext.save.isNight == 0)) {
-                            if (gSaveContext.save.isNight) {
-                                Message_StartTextbox(play, sDoubleTimeSkipToDayTextIds[CURRENT_DAY - 1], NULL);
-                            } else {
-                                Message_StartTextbox(play, sDoubleTimeSkipToNightTextIds[CURRENT_DAY - 1], NULL);
-                            }
-                            play->msgCtx.ocarinaMode = OCARINA_MODE_PROCESS_DOUBLE_TIME;
+                        // S30: pick the day and time on the clock instead (Message_UpdateDoubleTimePicker), up to the
+                        // final hour, the final night included
+                        if ((CURRENT_DAY >= 1) && (CURRENT_DAY <= 3)) {
+                            Message_StartDoubleTimePicker(play);
                         } else {
                             Message_StartTextbox(play, 0x1B94, NULL);
                             play->msgCtx.ocarinaMode = OCARINA_MODE_END;

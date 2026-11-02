@@ -70,4 +70,6 @@ typedef struct EnTest7 {
     /* 0x1E98 */ ActorFunc playerDrawFunc;
 } EnTest7; // size = 0x1E9C
 
+void EnTest7_StartWarp(struct PlayState* play, s32 ocarinaMode); // S30
+
 #endif // Z_EN_TEST7_H

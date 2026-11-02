@@ -332,5 +332,11 @@ void KaleidoScope_UpdateInventoryEditor(PlayState* play);
 
 extern s16 gVtxPageMapWorldQuadsWidth[];
 extern s16 gVtxPageMapWorldQuadsHeight[];
+ 
+// S30: the buttons items and masks go on from the pause menu: C, and the D-pad item slots (z_kaleido_item.c)
+#define KALEIDO_EQUIP_BUTTONS (BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT | BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT)
+s16 KaleidoScope_GetEquipButton(struct PlayState* play);
+s32 KaleidoScope_IsWornMaskOnButton(struct PlayState* play, s32 btn);
+void KaleidoScope_EquipOnButton(struct PlayState* play, s32 btn);
 
 #endif

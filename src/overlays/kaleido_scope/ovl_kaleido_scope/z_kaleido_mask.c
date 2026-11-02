@@ -540,33 +540,13 @@ void KaleidoScope_UpdateMaskCursor(PlayState* play) {
                 // Equip item to the C buttons
                 if ((pauseCtx->debugEditor == DEBUG_EDITOR_NONE) && !pauseCtx->itemDescriptionOn &&
                     (pauseCtx->state == PAUSE_STATE_MAIN) && (pauseCtx->mainState == PAUSE_MAIN_STATE_IDLE) &&
-                    CHECK_BTN_ANY(input->press.button, BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT)) {
+                    CHECK_BTN_ANY(input->press.button, KALEIDO_EQUIP_BUTTONS)) {
 
-                    // Ensure that a mask is not unequipped while being used
-                    if (CHECK_BTN_ALL(input->press.button, BTN_CLEFT)) {
-                        if (((Player_GetCurMaskItemId(play) != ITEM_NONE) &&
-                             (Player_GetCurMaskItemId(play) == BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT))) ||
-                            ((sMaskPlayerFormItems[GET_PLAYER_FORM] != ITEM_NONE) &&
-                             (sMaskPlayerFormItems[GET_PLAYER_FORM] == BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT)))) {
-                            Audio_PlaySfx(NA_SE_SY_ERROR);
-                            return;
-                        }
-                    } else if (CHECK_BTN_ALL(input->press.button, BTN_CDOWN)) {
-                        if (((Player_GetCurMaskItemId(play) != ITEM_NONE) &&
-                             (Player_GetCurMaskItemId(play) == BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN))) ||
-                            ((sMaskPlayerFormItems[GET_PLAYER_FORM] != ITEM_NONE) &&
-                             (sMaskPlayerFormItems[GET_PLAYER_FORM] == BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN)))) {
-                            Audio_PlaySfx(NA_SE_SY_ERROR);
-                            return;
-                        }
-                    } else if (CHECK_BTN_ALL(input->press.button, BTN_CRIGHT)) {
-                        if (((Player_GetCurMaskItemId(play) != ITEM_NONE) &&
-                             (Player_GetCurMaskItemId(play) == BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT))) ||
-                            ((sMaskPlayerFormItems[GET_PLAYER_FORM] != ITEM_NONE) &&
-                             (sMaskPlayerFormItems[GET_PLAYER_FORM] == BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT)))) {
-                            Audio_PlaySfx(NA_SE_SY_ERROR);
-                            return;
-                        }
+                    // S30: on any C or D-pad button; a mask being worn stays on its own
+                    pauseCtx->equipTargetCBtn = KaleidoScope_GetEquipButton(play);
+                    if (KaleidoScope_IsWornMaskOnButton(play, pauseCtx->equipTargetCBtn + 1)) {
+                        Audio_PlaySfx(NA_SE_SY_ERROR);
+                        return;
                     }
 
                     if ((Player_GetEnvironmentalHazard(play) >= PLAYER_ENV_HAZARD_UNDERWATER_FLOOR) &&
@@ -575,14 +555,6 @@ void KaleidoScope_UpdateMaskCursor(PlayState* play) {
                          (cursorSlot == (SLOT_MASK_GORON - ITEM_NUM_SLOTS)))) {
                         Audio_PlaySfx(NA_SE_SY_ERROR);
                         return;
-                    }
-
-                    if (CHECK_BTN_ALL(input->press.button, BTN_CLEFT)) {
-                        pauseCtx->equipTargetCBtn = PAUSE_EQUIP_C_LEFT;
-                    } else if (CHECK_BTN_ALL(input->press.button, BTN_CDOWN)) {
-                        pauseCtx->equipTargetCBtn = PAUSE_EQUIP_C_DOWN;
-                    } else if (CHECK_BTN_ALL(input->press.button, BTN_CRIGHT)) {
-                        pauseCtx->equipTargetCBtn = PAUSE_EQUIP_C_RIGHT;
                     }
 
                     // Equip item to the C buttons
@@ -625,8 +597,8 @@ void KaleidoScope_UpdateMaskCursor(PlayState* play) {
 // The C buttons moved on the HUD (z_parameter.c): same screen-to-page mapping
 // as the N64 values (centre x: 660 + 10.9 per pixel from 240.5, centre y:
 // 1100 - 11.25 per pixel from 31.5); C-right is the shoulder pill's icon
-s16 sMaskCButtonPosX[] = { 856, 1096, 1265 };
-s16 sMaskCButtonPosY[] = { 1280, 1044, 1308 };
+s16 sMaskCButtonPosX[] = { 856, 1096, 1265, 1396, 1396, 1221, 1570 }; // then the D-pad items (z_kaleido_item.c)
+s16 sMaskCButtonPosY[] = { 1280, 1044, 1308, 937, 577, 757, 757 };
 #else
 s16 sMaskCButtonPosX[] = { 660, 900, 1140 };
 s16 sMaskCButtonPosY[] = { 1100, 920, 1100 };
@@ -728,86 +700,8 @@ void KaleidoScope_UpdateMaskEquip(PlayState* play) {
                 return;
             }
 
-            // Equip mask onto c buttons
-            if (pauseCtx->equipTargetCBtn == PAUSE_EQUIP_C_LEFT) {
-                // Swap if mask is already equipped on CDown or CRight.
-                if (pauseCtx->equipTargetSlot == C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN)) {
-                    if ((BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT) & 0xFF) != ITEM_NONE) {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN) = BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT);
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN) = C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT);
-                        Interface_LoadItemIcon(play, EQUIP_SLOT_C_DOWN);
-                    } else {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN) = ITEM_NONE;
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN) = SLOT_NONE;
-                    }
-                } else if (pauseCtx->equipTargetSlot == C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT)) {
-                    if ((BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT) & 0xFF) != ITEM_NONE) {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT) = BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT);
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT) = C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT);
-                        Interface_LoadItemIcon(play, EQUIP_SLOT_C_RIGHT);
-                    } else {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT) = ITEM_NONE;
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT) = SLOT_NONE;
-                    }
-                }
-
-                // Equip mask on CLeft
-                BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT) = pauseCtx->equipTargetItem;
-                C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT) = pauseCtx->equipTargetSlot;
-                Interface_LoadItemIconImpl(play, EQUIP_SLOT_C_LEFT);
-            } else if (pauseCtx->equipTargetCBtn == PAUSE_EQUIP_C_DOWN) {
-                // Swap if mask is already equipped on CLeft or CRight.
-                if (pauseCtx->equipTargetSlot == C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT)) {
-                    if ((BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN) & 0xFF) != ITEM_NONE) {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT) = BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN);
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT) = C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN);
-                        Interface_LoadItemIcon(play, EQUIP_SLOT_C_LEFT);
-                    } else {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT) = ITEM_NONE;
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT) = SLOT_NONE;
-                    }
-                } else if (pauseCtx->equipTargetSlot == C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT)) {
-                    if ((BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN) & 0xFF) != ITEM_NONE) {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT) = BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN);
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT) = C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN);
-                        Interface_LoadItemIcon(play, EQUIP_SLOT_C_RIGHT);
-                    } else {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT) = ITEM_NONE;
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT) = SLOT_NONE;
-                    }
-                }
-
-                // Equip mask on CDown
-                BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN) = pauseCtx->equipTargetItem;
-                C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN) = pauseCtx->equipTargetSlot;
-                Interface_LoadItemIconImpl(play, EQUIP_SLOT_C_DOWN);
-            } else { // (pauseCtx->equipTargetCBtn == PAUSE_EQUIP_C_RIGHT)
-                // Swap if mask is already equipped on CLeft or CDown.
-                if (pauseCtx->equipTargetSlot == C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT)) {
-                    if ((BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT) & 0xFF) != ITEM_NONE) {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT) = BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT);
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT) = C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT);
-                        Interface_LoadItemIcon(play, EQUIP_SLOT_C_LEFT);
-                    } else {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_LEFT) = ITEM_NONE;
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_LEFT) = SLOT_NONE;
-                    }
-                } else if (pauseCtx->equipTargetSlot == C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN)) {
-                    if ((BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT) & 0xFF) != ITEM_NONE) {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN) = BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT);
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN) = C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT);
-                        Interface_LoadItemIcon(play, EQUIP_SLOT_C_DOWN);
-                    } else {
-                        BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_DOWN) = ITEM_NONE;
-                        C_SLOT_EQUIP(0, EQUIP_SLOT_C_DOWN) = SLOT_NONE;
-                    }
-                }
-
-                // Equip mask on CRight
-                BUTTON_ITEM_EQUIP(0, EQUIP_SLOT_C_RIGHT) = pauseCtx->equipTargetItem;
-                C_SLOT_EQUIP(0, EQUIP_SLOT_C_RIGHT) = pauseCtx->equipTargetSlot;
-                Interface_LoadItemIconImpl(play, EQUIP_SLOT_C_RIGHT);
-            }
+            // Equip mask onto c buttons (S30: or the D-pad)
+            KaleidoScope_EquipOnButton(play, pauseCtx->equipTargetCBtn + 1);
 
             // Reset params
             pauseCtx->mainState = PAUSE_MAIN_STATE_IDLE;

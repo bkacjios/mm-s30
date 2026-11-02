@@ -318,6 +318,9 @@ void Message_LoadItemIcon(struct PlayState* play, u16 itemId, s16 arg2);
 void Message_DecodeHeader(struct PlayState* play);
 void Message_PauseMenu_ShowDescription(struct PlayState* play, u16 textId, u8 textBoxPos);
 void Message_StartTextbox(struct PlayState* play, u16 textId, struct Actor* actor);
+// S30: the Song of Double Time's day and time picker (z_message.c)
+void Message_StartDoubleTimePicker(struct PlayState* play);
+s32 Message_GetDoubleTimePick(u16* time, s32* day);
 void Message_ContinueTextbox(struct PlayState* play, u16 textId);
 void Message_DisplaySceneTitleCard(struct PlayState* play, u16 textId);
 void Message_BombersNotebookQueueEvent(struct PlayState* play, u8 event);

@@ -291,7 +291,12 @@ typedef struct SaveInfo {
     /* 0x028 */ ItemEquips equips;
     /* 0x04C */ Inventory inventory;
     /* 0x0D4 */ PermanentSceneFlags permanentSceneFlags[120];
-    /* 0xDF4 */ UNK_TYPE1 unk_DF4[0x54];
+    // S30: D-pad item slots (up, down, left, right) in bytes the original game leaves unused, so saves keep their
+    // layout; shared by all forms, as the C buttons are
+    /* 0xDF4 */ u8 dpadItems[4];
+    /* 0xDF8 */ u8 dpadSlots[4];
+    /* 0xDFC */ u8 dpadSet; // DPAD_SET once the above are initialised (older saves hold zeroes)
+    /* 0xDFD */ UNK_TYPE1 unk_DFD[0x4B];
     /* 0xE48 */ u32 dekuPlaygroundHighScores[3];
     /* 0xE54 */ u32 pictoFlags0;                       // Flags set by `PictoActor`s if pictograph is valid
     /* 0xE58 */ u32 pictoFlags1;                       // Flags set by Snap_ValidatePictograph() to record errors; volatile since that function is run many times in succession
@@ -484,6 +489,7 @@ typedef struct SaveContext {
     /* 0x3F68 */ CycleSceneFlags cycleSceneFlags[120]; // Scene flags that are temporarily stored over the duration of a single 3-day cycle
     /* 0x48C8 */ u16 dungeonSceneSharedIndex; // similar to mapIndex, except values correspond to one of the four dungeons "scene_id_mix"
     /* 0x48CA */ u8 masksGivenOnMoon[27];     // bit-packed, masks given away on the Moon. "mask_mask_bit"
+    u8 dpadButtonStatus[4]; // S30: as buttonStatus, for the D-pad items (not saved: flash saves end at fileNum)
 } SaveContext; // size = 0x48C8
 
 typedef enum ButtonStatus {
@@ -573,16 +579,38 @@ typedef enum {
 #define GET_CYCLE_CHEST_OPENED(sceneId, chestFlagId) ((void)0, gSaveContext.cycleSceneFlags[(sceneId)].chest) & (1 << (chestFlagId));
 
 
-#define GET_CUR_FORM_BTN_ITEM(btn) ((u8)((btn) == EQUIP_SLOT_B ? BUTTON_ITEM_EQUIP(CUR_FORM, btn) : BUTTON_ITEM_EQUIP(0, btn)))
-#define GET_CUR_FORM_BTN_SLOT(btn) ((u8)((btn) == EQUIP_SLOT_B ? C_SLOT_EQUIP(CUR_FORM, btn) : C_SLOT_EQUIP(0, btn)))
+// S30: item buttons 4-7 (DPAD_BTN) are the D-pad item slots, after B and the C buttons (EQUIP_SLOT_A, also 4, is
+// never an item button)
+#define DPAD_SET 0x5A
+#define BUTTON_ITEM_MAX 8
+#define DPAD_BTN(dir) (4 + (dir)) // dir: 0 up, 1 down, 2 left, 3 right
+#define BUTTON_STATUS(btn) (*((btn) < 4 ? &gSaveContext.buttonStatus[btn] : &gSaveContext.dpadButtonStatus[(btn) - 4]))
+#define DPAD_SET_STATUS(status)                                                                                   \
+    (gSaveContext.dpadButtonStatus[0] = gSaveContext.dpadButtonStatus[1] = gSaveContext.dpadButtonStatus[2] = \
+         gSaveContext.dpadButtonStatus[3] = (status))
+
+#define GET_CUR_FORM_BTN_ITEM(btn)                                                                     \
+    ((u8)((btn) >= 4 ? gSaveContext.save.saveInfo.dpadItems[(btn) - 4]                                 \
+                     : ((btn) == EQUIP_SLOT_B ? BUTTON_ITEM_EQUIP(CUR_FORM, btn) : BUTTON_ITEM_EQUIP(0, btn))))
+#define GET_CUR_FORM_BTN_SLOT(btn)                                                                     \
+    ((u8)((btn) >= 4 ? gSaveContext.save.saveInfo.dpadSlots[(btn) - 4]                                 \
+                     : ((btn) == EQUIP_SLOT_B ? C_SLOT_EQUIP(CUR_FORM, btn) : C_SLOT_EQUIP(0, btn))))
 
 #define C_BTN_ITEM(btn)                                 \
     ((gSaveContext.buttonStatus[(btn)] != BTN_DISABLED) \
          ? BUTTON_ITEM_EQUIP(0, (btn))                  \
          : ((gSaveContext.hudVisibility == HUD_VISIBILITY_A_B_C) ? BUTTON_ITEM_EQUIP(0, (btn)) : ITEM_NONE))
 
+// S30: C_BTN_ITEM for any item button 1-7 (BUTTON_STATUS, GET_CUR_FORM_BTN_ITEM)
+#define ITEM_BTN_ITEM(btn)                                \
+    ((BUTTON_STATUS(btn) != BTN_DISABLED)                 \
+         ? GET_CUR_FORM_BTN_ITEM(btn)                     \
+         : ((gSaveContext.hudVisibility == HUD_VISIBILITY_A_B_C) ? GET_CUR_FORM_BTN_ITEM(btn) : ITEM_NONE))
+
 #define SET_CUR_FORM_BTN_ITEM(btn, item)             \
-    if ((btn) == EQUIP_SLOT_B) {                     \
+    if ((btn) >= 4) {                                \
+        gSaveContext.save.saveInfo.dpadItems[(btn) - 4] = (item); \
+    } else if ((btn) == EQUIP_SLOT_B) {              \
         BUTTON_ITEM_EQUIP(CUR_FORM, (btn)) = (item); \
     } else {                                         \
         BUTTON_ITEM_EQUIP(0, (btn)) = (item);        \
@@ -590,7 +618,9 @@ typedef enum {
     (void)0
 
 #define SET_CUR_FORM_BTN_SLOT(btn, item)        \
-    if ((btn) == EQUIP_SLOT_B) {                \
+    if ((btn) >= 4) {                           \
+        gSaveContext.save.saveInfo.dpadSlots[(btn) - 4] = (item); \
+    } else if ((btn) == EQUIP_SLOT_B) {         \
         C_SLOT_EQUIP(CUR_FORM, (btn)) = (item); \
     } else {                                    \
         C_SLOT_EQUIP(0, (btn)) = (item);        \
