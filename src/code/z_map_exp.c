@@ -1,4 +1,5 @@
 #include "global.h"
+#include "s30_map/s30_map.h"
 
 s16 sPlayerInitPosX = 0;
 s16 sPlayerInitPosZ = 0;
@@ -172,7 +173,7 @@ void Map_SetAreaEntrypoint(PlayState* play) {
     sPlayerInitDir = (0x7FFF - player->actor.shape.rot.y) / 0x400;
 }
 
-void Map_InitRoomData(PlayState* play, s16 room) {
+static void Map_InitRoomData_Original(PlayState* play, s16 room) {
     s32 mapIndex = gSaveContext.mapIndex;
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
 
@@ -193,11 +194,19 @@ void Map_InitRoomData(PlayState* play, s16 room) {
     }
 }
 
+// S30: with the map overhaul's hooks around it (s30_map.h)
+void Map_InitRoomData(PlayState* play, s16 room) {
+    if (gS30MapOverhaul) {
+        on_Map_InitRoomData(play, room);
+    }
+    Map_InitRoomData_Original(play, room);
+}
+
 void Map_Destroy(PlayState* play) {
     MapDisp_Destroy(play);
 }
 
-void Map_Init(PlayState* play) {
+static void Map_Init_Original(PlayState* play) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
     s32 dungeonSceneSharedIndex;
 
@@ -236,6 +245,14 @@ void Map_Init(PlayState* play) {
         gSaveContext.dungeonSceneSharedIndex = dungeonSceneSharedIndex;
         Map_InitRoomData(play, play->roomCtx.curRoom.num);
     }
+}
+
+// S30: with the map overhaul's hooks around it (s30_map.h)
+void Map_Init(PlayState* play) {
+    if (gS30MapOverhaul) {
+        on_Map_Init(play);
+    }
+    Map_Init_Original(play);
 }
 
 void Map_DrawMinimap(PlayState* play) {

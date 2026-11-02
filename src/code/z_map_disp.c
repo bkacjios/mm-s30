@@ -1,4 +1,5 @@
 #include "global.h"
+#include "s30_map/s30_map.h"
 #include "gfx.h"
 #include "sys_cmpdma.h"
 #include "assets/interface/icon_item_dungeon_static/icon_item_dungeon_static.h"
@@ -17,7 +18,7 @@ static UNK_TYPE4 D_801BEB30[2] = { 0, 0 };
 static u64 sWhiteSquareTex[] = {
 #include "assets/code/z_map_disp/white_square.i4.inc.c"
 };
-static MapDisp sMapDisp = {
+MapDisp sMapDisp = { // S30: not static, for the map overhaul (s30_map.h)
     NULL, -1, 210, 140, 0, 0,    NULL, -1, NULL, 0,    0, 0, 0,    NULL, NULL, 0,
     0,    0,  0,   0,   0, NULL, 0,    0,  0,    NULL, 0, 0, NULL, 0,    0,
 };
@@ -220,6 +221,10 @@ s32 MapDisp_CanDrawDoors(PlayState* play) {
 }
 
 void MapDisp_Minimap_DrawActorIcon(PlayState* play, Actor* actor) {
+    if (gS30MapOverhaul) { // S30
+        MapOverhaul_Minimap_DrawActorIcon(play, actor);
+        return;
+    }
     MapDataRoom* mapDataRoom;
     s32 posX;
     s32 posY;
@@ -496,7 +501,7 @@ void MapDisp_Init(PlayState* play) {
 
     sMapDisp.mapDataScene = NULL;
     sMapDisp.curRoom = -1;
-    sMapDisp.minimapBaseX = 210;
+    sMapDisp.minimapBaseX = 210 + S30_HUD_RIGHT;
     sMapDisp.minimapBaseY = 140;
     sMapDisp.minimapCurX = 210;
     sMapDisp.minimapCurY = 140;
@@ -854,7 +859,7 @@ void MapDisp_SwapRooms(s16 nextRoom) {
 
             if (nextMapDataRoom->mapId == MAP_DATA_NO_MAP) {
                 sMapDisp.minimapPrevY = 0;
-                sMapDisp.minimapBaseX = 210;
+                sMapDisp.minimapBaseX = 210 + S30_HUD_RIGHT;
                 sMapDisp.minimapBaseY = 140;
                 sMapDisp.minimapCurX = 210;
                 sMapDisp.minimapCurY = 140;
@@ -864,7 +869,7 @@ void MapDisp_SwapRooms(s16 nextRoom) {
             }
             MapDisp_GetMapOffset(nextMapDataRoom, &offsetX, &offsetY);
             MapDisp_GetMapTexDim(nextMapDataRoom, &width, &height);
-            sMapDisp.minimapBaseX = 295 - width;
+            sMapDisp.minimapBaseX = 295 + S30_HUD_RIGHT - width;
             sMapDisp.minimapBaseY = 220 - height;
             if (sMapDisp.prevRoom != -1) {
                 prevMapDataRoom = &sMapDisp.mapDataScene->rooms[sMapDisp.prevRoom];

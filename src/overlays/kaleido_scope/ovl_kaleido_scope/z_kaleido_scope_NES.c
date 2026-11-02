@@ -5,6 +5,7 @@
  */
 
 #include "z_kaleido_scope.h"
+#include "s30_map/s30_map.h"
 
 #include "sys_cmpdma.h"
 #include "z64map.h"
@@ -751,7 +752,7 @@ TexturePtr D_8082B9A8[] = {
     gPauseToMasksENGTex,
     gPauseToSelectItemENGTex,
 };
-void KaleidoScope_DrawInfoPanel(PlayState* play) {
+static void KaleidoScope_DrawInfoPanel_Original(PlayState* play) {
     static s16 sPauseZRCursorColorTargets[][4] = {
         { 180, 210, 255, 220 },
         { 100, 100, 150, 220 },
@@ -1116,11 +1117,22 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// S30: with the map overhaul's hooks around it (s30_map.h)
+void KaleidoScope_DrawInfoPanel(PlayState* play) {
+    if (gS30MapOverhaul) {
+        on_KaleidoScope_DrawInfoPanel(play);
+    }
+    KaleidoScope_DrawInfoPanel_Original(play);
+    if (gS30MapOverhaul) {
+        after_KaleidoScope_DrawInfoPanel();
+    }
+}
+
 u8 sUnpausedButtonStatus[5];
 f32 sCursorCirclesX[4];
 f32 sCursorCirclesY[4];
 
-void KaleidoScope_UpdateNamePanel(PlayState* play) {
+static void KaleidoScope_UpdateNamePanel_Original(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
     u16 namedItem;
 
@@ -1156,6 +1168,17 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
         }
     } else {
         pauseCtx->nameDisplayTimer = 0;
+    }
+}
+
+// S30: with the map overhaul's hooks around it (s30_map.h)
+void KaleidoScope_UpdateNamePanel(PlayState* play) {
+    if (gS30MapOverhaul) {
+        on_KaleidoScope_UpdateNamePanel(play);
+    }
+    KaleidoScope_UpdateNamePanel_Original(play);
+    if (gS30MapOverhaul) {
+        after_KaleidoScope_UpdateNamePanel();
     }
 }
 
@@ -2460,6 +2483,9 @@ f32 sQuestStatusCursorsY[] = {
 };
 
 void KaleidoScope_UpdateCursorSize(PlayState* play) {
+    if (gS30MapOverhaul) { // S30
+        on_KaleidoScope_UpdateCursorSize(play);
+    }
     PauseContext* pauseCtx = &play->pauseCtx;
     s16 index;
 
@@ -2702,7 +2728,8 @@ void KaleidoScope_Draw(PlayState* play) {
 
             KaleidoScope_SetView(pauseCtx, 0.0f, 0.0f, 64.0f);
 
-            if (!IS_PAUSE_STATE_GAMEOVER(pauseCtx)) {
+            // S30: no info panel while the map overhaul's map is zoomed in
+            if (!IS_PAUSE_STATE_GAMEOVER(pauseCtx) && !(gS30MapOverhaul && MapOverhaul_HideInfoPanel(pauseCtx))) {
                 KaleidoScope_DrawInfoPanel(play);
             }
 

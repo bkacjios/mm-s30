@@ -700,7 +700,84 @@ typedef struct {
     u16 w, h;
     u32 lastUse;
     GLint filter, wrapS, wrapT; // current GL parameters (0 = unset)
+    u8 mipmapped;               // a replacement texture's mipmaps: minify with them
 } TexEntry;
+
+/* Replacement textures (S30Gfx_TextureOverride): a tile loaded into TMEM from
+   `src` draws `pixels` instead, at their own resolution (texture coordinates
+   stay the tile's, normalised). The GL texture is made at first use. */
+typedef struct {
+    const void* src;
+    void* pixels; // freed once uploaded
+    int w, h, rgb565;
+    TexEntry entry;
+} TexOverride;
+
+static u32 sFrame; // (defined below)
+
+#define TEX_OVERRIDE_MAX 48
+static TexOverride sTexOverrides[TEX_OVERRIDE_MAX];
+static int sTexOverrideCount;
+static const u8* sTmemSrc[512]; // where each TMEM line (8 bytes) was last loaded from, by its first line
+
+void S30Gfx_TextureOverride(const void* src, int w, int h, int rgb565, void* pixels) {
+    int i;
+
+    for (i = 0; i < sTexOverrideCount; i++) {
+        if (sTexOverrides[i].src == src) {
+            break;
+        }
+    }
+    if (i == TEX_OVERRIDE_MAX) {
+        free(pixels); // full
+        return;
+    }
+    if ((i < sTexOverrideCount) && (sTexOverrides[i].pixels == pixels)) {
+        return; // registered already
+    }
+    sTexOverrides[i].pixels = pixels;
+    sTexOverrides[i].w = w;
+    sTexOverrides[i].h = h;
+    sTexOverrides[i].rgb565 = rgb565;
+    sTexOverrides[i].src = src;
+    __sync_synchronize(); // the entry before the count that publishes it (the renderer may be another thread)
+    if (i == sTexOverrideCount) {
+        sTexOverrideCount++;
+    }
+}
+
+/* The replacement for a tile, if its TMEM was loaded from a replaced texture */
+static TexEntry* tex_override(const Tile* t, int w, int h) {
+    const u8* src = sTmemSrc[t->tmem & 511];
+    int i;
+
+    for (i = 0; i < sTexOverrideCount; i++) {
+        TexOverride* o = &sTexOverrides[i];
+
+        if (o->src != src) {
+            continue;
+        }
+        if (o->entry.tex == 0) {
+            glGenTextures(1, &o->entry.tex);
+            glBindTexture(GL_TEXTURE_2D, o->entry.tex);
+            if (o->rgb565) {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, o->w, o->h, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, o->pixels);
+            } else {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, o->w, o->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, o->pixels);
+            }
+            glGenerateMipmap(GL_TEXTURE_2D); // sizes are powers of 2 (GLES2)
+            o->entry.mipmapped = 1;
+            free(o->pixels); // the GL texture has its own copy
+            o->pixels = NULL;
+            sGL.tex[0] = sGL.tex[1] = 0; // bound above: rebind as needed
+        }
+        o->entry.w = w;
+        o->entry.h = h;
+        o->entry.lastUse = sFrame;
+        return &o->entry;
+    }
+    return NULL;
+}
 
 #define TEX_CACHE_SIZE 2048
 static TexEntry sTexCache[TEX_CACHE_SIZE];
@@ -879,6 +956,9 @@ static TexEntry* tex_lookup(int tileIdx, int* outW, int* outH) {
     }
     *outW = w;
     *outH = h;
+    if (sTexOverrideCount != 0 && (e = tex_override(t, w, h)) != NULL) {
+        return e;
+    }
     if (tc->entry != NULL && tc->entry->hash == tc->hash && tc->gen == sTmemGen && tc->tlutMode == tlutMode &&
         memcmp(&tc->tile, t, sizeof(Tile)) == 0) {
         tc->entry->lastUse = sFrame;
@@ -992,7 +1072,8 @@ static void bind_tile(int unit, int tileIdx, float size[2]) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, e->tex);
         if (e->filter != filter) {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                            (e->mipmapped && filter == GL_LINEAR) ? GL_LINEAR_MIPMAP_LINEAR : filter);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
         }
         if (e->wrapS != ws) {
@@ -1146,7 +1227,8 @@ static const u8* texture_src(void) {
 
 static void load_block(int tileIdx, u32 uls, u32 lrs, u32 dxt) {
     Tile* t = &rdp.tiles[tileIdx & 7];
-    const u8* src = texture_src();
+    const u8* base = texture_src();
+    const u8* src = base;
     u32 texels = lrs - uls + 1;
     u32 bytes = rdp.timgSiz == G_IM_SIZ_4b ? (texels + 1) / 2 : texels << (rdp.timgSiz - 1);
     u32 dst = t->tmem * 8;
@@ -1168,6 +1250,7 @@ static void load_block(int tileIdx, u32 uls, u32 lrs, u32 dxt) {
         return;
     }
     flush_for(FR_LOADBLOCK);
+    sTmemSrc[t->tmem & 511] = base; // after the flush: queued draws still use the old texture
     copy_swapped(&sTmem[dst], src, bytes);
     sTmemGen++;
 }
@@ -1190,6 +1273,7 @@ static void load_tile(int tileIdx, u32 uls, u32 ult, u32 lrs, u32 lrt) {
         return;
     }
     flush_for(FR_LOADTILE);
+    sTmemSrc[t->tmem & 511] = src; // after the flush: queued draws still use the old texture
     for (y = y0; y <= y1; y++) {
         const u8* s = src + y * srcPitch + (x0 * bpt2) / 2;
         u32 d = t->tmem * 8 + (y - y0) * pitch;

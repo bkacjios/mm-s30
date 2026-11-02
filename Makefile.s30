@@ -46,6 +46,10 @@ REPLACED += src/libultra/libc/string.c src/boot/libc/memmove.c src/boot/libc/mem
     src/boot/libc/strcmp.c src/boot/libc/strcpy.c src/boot/libc64/sprintf.c
 SRCS := $(filter-out src/makerom/% $(REPLACED),$(wildcard $(addsuffix .c,$(SPEC_O))))
 OBJS := $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(SRCS))
+# The map overhaul (src/s30_map/s30_map.h), game code like the rest
+MAP_SRCS := $(filter-out %.inc.c,$(wildcard src/s30_map/*.c src/s30_map/lib/*.c src/s30_map/patches/*.c))
+OBJS += $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(MAP_SRCS))
+$(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(MAP_SRCS)): CFLAGS += -Isrc/s30_map -Isrc/s30_map/generated
 
 # The port's own code: OS services on Linux (reimpl.c) and the platform layer
 PORT_OBJS := $(BUILD_DIR)/src/linux/reimpl.o $(BUILD_DIR)/src/linux/mgu.o $(BUILD_DIR)/src/audio/lib/mixer.o \

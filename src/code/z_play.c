@@ -1,4 +1,5 @@
 #include "PR/ultratypes.h"
+#include "s30_map/s30_map.h"
 
 // Variables are put before most headers as a hacky way to bypass bss reordering
 s16 sTransitionFillTimer;
@@ -1153,6 +1154,9 @@ void Play_PostWorldDraw(PlayState* this) {
 }
 
 void Play_DrawMain(PlayState* this) {
+    if (gS30MapOverhaul) { // S30
+        onPlay_DrawMain(this);
+    }
     GraphicsContext* gfxCtx = this->state.gfxCtx;
     Lights* lights;
     Vec3f temp;
@@ -2112,6 +2116,8 @@ void Play_FillScreen(PlayState* this, s16 fillScreenOn, u8 red, u8 green, u8 blu
 
 void Play_Init(GameState* thisx) {
     PlayState* this = (PlayState*)thisx;
+
+    S30Map_Init(); // the map overhaul's painted map, once
     GraphicsContext* gfxCtx = this->state.gfxCtx;
     s32 pad;
     uintptr_t zAlloc;

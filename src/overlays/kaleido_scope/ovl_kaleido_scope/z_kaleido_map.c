@@ -5,6 +5,7 @@
  */
 
 #include "z_kaleido_scope.h"
+#include "s30_map/s30_map.h"
 #include "assets/interface/parameter_static/parameter_static.h"
 #include "assets/interface/icon_item_field_static/icon_item_field_static.h"
 #include "assets/interface/icon_item_dungeon_static/icon_item_dungeon_static.h"
@@ -535,6 +536,10 @@ s16 sGreatFairySpawnRegions[] = {
 };
 
 void KaleidoScope_DrawWorldMap(PlayState* play) {
+    if (gS30MapOverhaul) { // S30
+        MapOverhaul_DrawWorldMap(play);
+        return;
+    }
     s16 sceneId;
     s16 t;
     s16 n;
@@ -840,6 +845,10 @@ u16 sOwlWarpPauseItems[] = {
 };
 
 void KaleidoScope_UpdateWorldMapCursor(PlayState* play) {
+    if (gS30MapOverhaul) { // S30
+        MapOverhaul_UpdateWorldMapCursor(play);
+        return;
+    }
     static u16 sStickAdjTimer = 0; // unused timer that counts up every frame. Resets on reading a stickAdj.
     PauseContext* pauseCtx = &play->pauseCtx;
     s16 oldCursorPoint;
