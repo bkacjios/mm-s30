@@ -2,12 +2,16 @@
 # hard-float, Alpine musl, GLES2 on KMS/EGL, ALSA, evdev). Same layout as
 # ports/oot's Makefile.s30.
 #
+#   make -f Makefile.s30 extract    # ROM -> extracted/, build/ sources (host; the US ROM
+#                                   # in baseroms/n64-us/baserom.z64, venv in .venv)
 #   make -f Makefile.s30 assets     # asset segments for ARM -> data/*.bin (host)
 #   make -f Makefile.s30 -k objs    # compile the game code (bring-up)
 #
 # WORK is the pocketgo-s30 build tree (sysroot + armv7-clang wrapper).
 
 WORK ?= ../../s30-build
+# The shared N64 platform library (display, renderer, audio, input)
+N64LIB ?= ../../n64
 SYSROOT := $(abspath $(WORK)/sysroot)
 VERSION ?= n64-us
 
@@ -28,9 +32,10 @@ CFLAGS := $(TARGET_FLAGS) -O2 -Wall -std=gnu23 -DLINUX -D_LANGUAGE_C -D_GNU_SOUR
     -Wno-incompatible-pointer-types -Wno-int-conversion \
     -g -fno-toplevel-reorder -fwrapv -fno-strict-aliasing -funsigned-char -MMD -MP \
     -include include/s30/s30_libc_compat.h \
-    -Iinclude -Iinclude/s30 -Isrc -I. -Iextracted/$(VERSION) -Ibuild/$(VERSION)
+    -Iinclude -Iinclude/s30 -I$(N64LIB)/include/s30 -Isrc -I. -Iextracted/$(VERSION) -Ibuild/$(VERSION)
 
 BUILD_DIR := build_s30
+include $(N64LIB)/n64.mk
 
 # The game's C files for this version: the spec's src/ objects that have a
 # .c (the rest are MIPS assembly or the N64 ROM header/IPL)
@@ -52,11 +57,11 @@ OBJS += $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(MAP_SRCS))
 $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(MAP_SRCS)): CFLAGS += -Isrc/s30_map -Isrc/s30_map/generated
 
 # The port's own code: OS services on Linux (reimpl.c) and the platform layer
-PORT_OBJS := $(BUILD_DIR)/src/linux/reimpl.o $(BUILD_DIR)/src/linux/mgu.o $(BUILD_DIR)/src/audio/lib/mixer.o \
-    $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(wildcard src/s30/*.c))
+PORT_OBJS := $(BUILD_DIR)/src/linux/reimpl.o $(BUILD_DIR)/src/linux/mgu.o \
+    $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(wildcard src/s30/*.c)) $(N64LIB_OBJS)
 
 TARGET := majora
-LIBS := -lGLESv2 -lEGL -lgbm -ldrm -lasound -lpthread -lm
+LIBS := $(N64LIB_LIBS)
 # Asset symbol addresses (segment-relative), one definition each
 ASSET_SYMBOLS := -Wl,build_assets/assets/symbols.ld
 
@@ -83,6 +88,20 @@ $(BUILD_DIR)/src/s30/%.o: src/s30/%.c
 	$(LINK) $(filter-out -fno-toplevel-reorder -mfloat-abi=hard -fno-short-enums -isystem $(SYSROOT)/usr/include,$(CFLAGS)) \
 	    -I$(SYSROOT)/usr/include/libdrm -c $< -o $@
 
+# The decomp's extraction and the sources it generates, from
+# baseroms/$(VERSION)/baserom.z64. No MIPS toolchain is used: the decomp's
+# Makefile only checks that its binutils exist, so any ld passes.
+UPSTREAM = $(MAKE) -f Makefile VERSION=$(VERSION) MIPS_BINUTILS_PREFIX=arm-none-eabi- PYTHON=$(PYTHON)
+extract:
+	$(UPSTREAM) setup
+	$(UPSTREAM) assets
+	$(UPSTREAM) asset_files schedule_inc_files \
+	    build/$(VERSION)/assets/text/message_data.enc.h build/$(VERSION)/assets/text/message_data_staff.enc.h \
+	    build/$(VERSION)/dmadata/dmadata_table_spec.h \
+	    build/$(VERSION)/assets/audio/samplebank_table.h build/$(VERSION)/assets/audio/soundfont_table.h
+	$(UPSTREAM) $$(ls build/$(VERSION)/assets/audio/soundfonts/*.xml | sed 's/\.xml$$/.h/')
+	$(PYTHON) pc_tools/audio_sizes.py --version $(VERSION)
+
 assets:
 	S30_SYSROOT=$(SYSROOT) MM_VERSION=$(VERSION) $(PYTHON) pc_tools/make_assets.py
 
@@ -106,6 +125,6 @@ clean:
 clean-assets:
 	rm -rf build_assets/assets data
 
-.PHONY: all objs assets clean clean-assets
+.PHONY: all objs extract assets clean clean-assets
 
 -include $(OBJS:.o=.d) $(PORT_OBJS:.o=.d)

@@ -37,5 +37,6 @@ graphs/
 # PocketGo S30 build (Makefile.s30)
 build_assets/
 build_s30/
+build_s30.log
 majora
 /src/s30/vrom_table.h
