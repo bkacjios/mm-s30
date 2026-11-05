@@ -16122,7 +16122,8 @@ void Player_Action_43(Player* this, PlayState* play) {
               Player_FriendlyLockOnOrParallel(this) || (!func_800B7128(this) && !func_8082EF20(this))))) ||
            ((this->unk_AA5 == PLAYER_UNKAA5_1) &&
             CHECK_BTN_ANY(sPlayerControlInput->press.button,
-                          BTN_CRIGHT | BTN_CLEFT | BTN_CDOWN | BTN_CUP | BTN_R | BTN_B | BTN_A))) ||
+                          BTN_CRIGHT | BTN_CLEFT | BTN_CDOWN | BTN_CUP | BTN_R | BTN_B | BTN_A |
+                              BTN_DPAD_ITEMS))) || // S30: and the D-pad items
           Player_ActionHandler_Talk(this, play)))) {
         func_80839ED0(this, play);
         Audio_PlaySfx(NA_SE_SY_CAMERA_ZOOM_UP);
@@ -18346,7 +18347,8 @@ void Player_Action_80(Player* this, PlayState* play) {
             }
         }
     } else if (CHECK_BTN_ANY(sPlayerControlInput->press.button,
-                             BTN_CRIGHT | BTN_CLEFT | BTN_CDOWN | BTN_CUP | BTN_R | BTN_A)) {
+                             BTN_CRIGHT | BTN_CLEFT | BTN_CDOWN | BTN_CUP | BTN_R | BTN_A |
+                                 BTN_DPAD_ITEMS)) { // S30: and the D-pad items
         play->bButtonAmmoPlusOne = -1;
         Player_Action_81(this, play);
         Player_SetAction(play, this, Player_Action_80, 0);
@@ -18749,7 +18751,8 @@ void Player_Action_86(Player* this, PlayState* play) {
                 (sp48 = ((this->transformation != PLAYER_FORM_HUMAN) ||
                          CHECK_WEEKEVENTREG(gPlayerTransformMaskFlags[GET_PLAYER_FORM])) &&
                         CHECK_BTN_ANY(sPlayerControlInput->press.button,
-                                      BTN_CRIGHT | BTN_CLEFT | BTN_CDOWN | BTN_CUP | BTN_B | BTN_A)))) {
+                                      BTN_CRIGHT | BTN_CLEFT | BTN_CDOWN | BTN_CUP | BTN_B | BTN_A |
+                                          BTN_DPAD_ITEMS)))) { // S30: the D-pad items skip it too
         R_PLAY_FILL_SCREEN_ON = 45;
         R_PLAY_FILL_SCREEN_R = 220;
         R_PLAY_FILL_SCREEN_G = 220;

@@ -276,7 +276,19 @@ void Play_TakePictoPhoto(PreRender* prerender) {
     Play_ConvertRgba16ToIntensityImage(gHiBuffer.pictoPhotoI8, prerender->fbufSave, SCREEN_WIDTH, PICTO_PHOTO_TOPLEFT_X,
                                        PICTO_PHOTO_TOPLEFT_Y, (PICTO_PHOTO_TOPLEFT_X + PICTO_PHOTO_WIDTH) - 1,
                                        (PICTO_PHOTO_TOPLEFT_Y + PICTO_PHOTO_HEIGHT) - 1, 8);
+#ifdef LINUX
+    gfx_texture_cache_invalidate(gHiBuffer.pictoPhotoI8);
+#endif
 }
+
+#ifdef LINUX
+int S30_TexElemSize(unsigned long addr) {
+    if (addr >= (uintptr_t)gHiBuffer.pictoPhotoI8 && addr < (uintptr_t)gHiBuffer.pictoPhotoI8 + PICTO_PHOTO_SIZE) {
+        return 1; // the CPU writes the photo a byte at a time
+    }
+    return 8; // u64 words
+}
+#endif
 
 s32 Play_ChooseDynamicTransition(PlayState* this, s32 transitionType) {
     s32 nextTransitionType = transitionType;
@@ -1445,9 +1457,15 @@ void Play_DrawMain(PlayState* this) {
                 }
 
 #ifdef LINUX
-                // Saved on the GPU (the pause background; the Pictograph Box
-                // and transition tile, which read it from RAM, don't work yet)
+                // Saved on the GPU (the pause background); the Pictograph Box
+                // reads it from RAM (Play_TakePictoPhoto), so for a photo the
+                // renderer also copies the frame to fbufSave as RGBA16. The
+                // transition tile, which reads it from RAM too, doesn't work yet.
                 S30_GFX_MARK_EMIT(sp74, S30_MARK_BG_SAVE);
+                if (R_PICTO_PHOTO_STATE == PICTO_PHOTO_STATE_PROCESS) {
+                    S30Gfx_ReadFrame(this->pauseBgPreRender.fbufSave);
+                    S30_GFX_MARK_EMIT(sp74, S30_MARK_FB_READ);
+                }
 #else
                 PreRender_SaveFramebuffer(&this->pauseBgPreRender, &sp74);
 

@@ -1,4 +1,7 @@
 #include "global.h"
+#ifdef LINUX
+#include "s30_platform.h" // gfx_texture_cache_invalidate
+#endif
 #include "PR/gs2dex.h"
 #include "sys_cfb.h"
 #include "sys_cmpdma.h"
@@ -2518,6 +2521,9 @@ void Interface_UpdateButtonsPart1(PlayState* play) {
                 Play_DecompressI5ToI8((u8*)((void)0, gSaveContext.pictoPhotoI5),
                                       (play->pictoPhotoI8 != NULL) ? play->pictoPhotoI8 : gWorkBuffer,
                                       PICTO_PHOTO_WIDTH * PICTO_PHOTO_HEIGHT);
+#ifdef LINUX
+                gfx_texture_cache_invalidate((play->pictoPhotoI8 != NULL) ? play->pictoPhotoI8 : gWorkBuffer);
+#endif
                 play->haltAllActors = true;
                 sPictoState = PICTO_BOX_STATE_SETUP_PHOTO;
             }

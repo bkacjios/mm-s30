@@ -584,6 +584,8 @@ typedef enum {
 #define DPAD_SET 0x5A
 #define BUTTON_ITEM_MAX 8
 #define DPAD_BTN(dir) (4 + (dir)) // dir: 0 up, 1 down, 2 left, 3 right
+// The D-pad item slots' buttons, beside the C buttons where the game checks for any item button
+#define BTN_DPAD_ITEMS (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT)
 #define BUTTON_STATUS(btn) (*((btn) < 4 ? &gSaveContext.buttonStatus[btn] : &gSaveContext.dpadButtonStatus[(btn) - 4]))
 #define DPAD_SET_STATUS(status)                                                                                   \
     (gSaveContext.dpadButtonStatus[0] = gSaveContext.dpadButtonStatus[1] = gSaveContext.dpadButtonStatus[2] = \

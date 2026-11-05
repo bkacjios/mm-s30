@@ -21,6 +21,13 @@ void S30_StartAudio(void);
 #define S30_MARK_VISMONO 0x564D4F4Eu    // "VMON": VisMono, desaturate the frame (prim/env colors)
 #define S30_MARK_MBLUR_BLEND 0x4D424C42u // "MBLB": motion blur, previous frame over this one at prim alpha
 #define S30_MARK_MBLUR_SAVE 0x4D424C53u  // "MBLS": motion blur, save this frame for the next
+#define S30_MARK_FB_READ 0x46425244u     // "FBRD": the frame so far into RAM, where S30Gfx_ReadFrame said
+void S30Gfx_ReadFrame(void* dst);
+// The game edited a texture in place: the renderer reloads it
+void gfx_texture_cache_invalidate(void* addr);
+// The renderer's texture element size at addr (src/code/z_play.c): 8 (u64
+// words, the compiled data) but 1 for the pictograph, written a byte at a time
+int S30_TexElemSize(unsigned long addr);
 
 // Graph callback depth test: whether a point at N64 screen pixel (x, y) and
 // NDC depth z passes the depth test against the z-buffer. Results lag one

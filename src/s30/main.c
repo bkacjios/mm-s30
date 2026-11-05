@@ -46,6 +46,11 @@ void S30_StartAudio(void) {
 }
 
 
+/* Texture data as u64 words, but the pictograph (src/code/z_play.c) */
+static int tex_elem_size(uintptr_t addr) {
+    return S30_TexElemSize(addr);
+}
+
 int main(int argc, char** argv) {
     char* exe = strdup(argv[0]);
     const char* exeDir = dirname(exe);
@@ -65,13 +70,16 @@ int main(int argc, char** argv) {
         // The game loop runs on this thread (Main); the game's threads stay
         // off. ROM data comes through DmaMgr (src/linux/reimpl.c), the save
         // through src/code/sys_flashrom.c.
-        S30OsConfig os = { 0 };
+        S30OsConfig os = {
+            .noWait = 1, // no scheduler thread to wait for (Sched_FlushTaskQueue): an empty queue fails
+        };
         S30Os_Init(&os);
     }
 
     {
-        // F3DEX2, float Mtx (the port's guMtxF2L), textures as u64 arrays
-        S30GfxConfig gfx = { S30_UCODE_F3DEX2, (uint32_t*)gSegments, 1, NULL, "MM" };
+        // F3DEX2, float Mtx (the port's guMtxF2L), textures as u64 arrays but
+        // the pictograph (tex_elem_size)
+        S30GfxConfig gfx = { S30_UCODE_F3DEX2, (uint32_t*)gSegments, 1, tex_elem_size, "MM" };
         S30Gfx_Configure(&gfx);
     }
     S30Display_Init();
