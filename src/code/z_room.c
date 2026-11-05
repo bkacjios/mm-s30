@@ -1,4 +1,5 @@
 #include "global.h"
+#include "s30_seams/s30_seams.h"
 #include "PR/gs2dex.h"
 #include "libu64/debug.h"
 #include "sys_ucode.h"
@@ -623,6 +624,7 @@ s32 Room_ProcessRoomRequest(PlayState* play, RoomContext* roomCtx) {
             if (Environment_GetStormState(play) == STORM_STATE_OFF) {
                 Environment_StopStormNatureAmbience(play);
             }
+            SeamFixer_RoomLoaded(play, roomCtx); // S30: the room's seams (src/s30_seams/s30_seams.h)
         } else {
             return false;
         }

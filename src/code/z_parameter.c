@@ -174,17 +174,17 @@ f32 sBButtonDoActionTextureScales[] = {
 #ifdef LINUX
 /* PocketGo S30 HUD, as in ports/oot (interface.h there): the buttons sit where
    they are on the device (s30/input.c), drawn SNES style. A face diamond of
-   27 px buttons: B on the left (Y), A at the bottom (B), C-left on top (X),
-   C-down on the right (A). C-right (R1) is a shoulder pill in the top right
+   27 px buttons: A on the right (A), B at the bottom (B), C-left on top (X),
+   C-down on the left (Y). C-right (R1) is a shoulder pill in the top right
    corner, C-up (Select, Tatl) a slanted pill top left. */
-#define S30_A_BUTTON_X 239
-#define S30_A_BUTTON_Y 38
+#define S30_A_BUTTON_X 261
+#define S30_A_BUTTON_Y 17
 #define S30_A_BUTTON_VIEW 40 // A disc 25.5 px: its sharp 3D edge reads larger than the 27 px sprites
-#define S30_B_BUTTON_X 223
-#define S30_B_BUTTON_Y 23
+#define S30_B_BUTTON_X 245
+#define S30_B_BUTTON_Y 44
 #define S30_C_LEFT_BUTTON_X 245
 #define S30_C_LEFT_BUTTON_Y 2
-#define S30_C_DOWN_BUTTON_X 267
+#define S30_C_DOWN_BUTTON_X 223
 #define S30_C_DOWN_BUTTON_Y 23
 // Shoulder pill: corner and size; its item icon is centred, S30_SHOULDER_ICON px
 #define S30_SHOULDER_X 274

@@ -16,6 +16,7 @@
 #include "unk.h"
 
 #include "s30/vrom_table.h"
+#include "s30_seams/s30_seams.h"
 #include "s30_input.h"
 #include "s30_platform.h"
 #define NORETURN
@@ -397,14 +398,18 @@ const char* func_800809F4(uintptr_t vrom) {
 }
 
 s32 DmaMgr_RequestSync(void* ram, uintptr_t vrom, size_t size) {
-    return DmaMgr_DmaRomToRam(vrom, ram, size);
+    s32 ret = DmaMgr_DmaRomToRam(vrom, ram, size);
+
+    SeamFixer_FileLoaded(ram, vrom, size);
+    return ret;
 }
 
 
 s32 DmaMgr_RequestAsync(DmaRequest* req, void* ram, uintptr_t vrom, size_t size, 
                         UNK_TYPE unk, OSMesgQueue* queue, OSMesg msg) {
     s32 ret = DmaMgr_DmaRomToRam(vrom, ram, size);
-    
+
+    SeamFixer_FileLoaded(ram, vrom, size);
     // Mark that DMA was started (PC does it synchronously)
     if (req != NULL) {
         req->vromAddr = vrom;

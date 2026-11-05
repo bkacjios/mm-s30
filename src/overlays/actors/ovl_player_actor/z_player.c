@@ -11171,6 +11171,15 @@ void Player_Init(Actor* thisx, PlayState* play) {
     s32 var_a1;
     PlayerStartMode startMode;
 
+    // S30: Easier Masks' Player_Init hook (z_play.c's Play_Init): the mask worn kept as the equipped one, unless it
+    // is a transformation mask (the owl statue's saved mask; a blue warp softlock)
+    if (gSaveContext.save.equippedMask == PLAYER_MASK_NONE) {
+        if (this->currentMask != PLAYER_MASK_DEKU && this->currentMask != PLAYER_MASK_GORON &&
+            this->currentMask != PLAYER_MASK_ZORA && this->currentMask != PLAYER_MASK_FIERCE_DEITY) {
+            gSaveContext.save.equippedMask = this->currentMask;
+        }
+    }
+
     play->playerInit = Player_InitCommon;
     play->playerUpdate = Player_UpdateCommon;
     play->unk_18770 = func_8085B170;

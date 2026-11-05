@@ -63,6 +63,9 @@ OBJS := $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(SRCS))
 MAP_SRCS := $(filter-out %.inc.c,$(wildcard src/s30_map/*.c src/s30_map/lib/*.c src/s30_map/patches/*.c))
 OBJS += $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(MAP_SRCS))
 $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(MAP_SRCS)): CFLAGS += -Isrc/s30_map -Isrc/s30_map/generated
+# Seam Fixer (src/s30_seams/s30_seams.h)
+SEAM_SRCS := $(wildcard src/s30_seams/*.c)
+OBJS += $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(SEAM_SRCS))
 
 # The port's own code: OS services on Linux (reimpl.c) and the platform layer
 PORT_OBJS := $(BUILD_DIR)/src/linux/reimpl.o $(BUILD_DIR)/src/linux/mgu.o \

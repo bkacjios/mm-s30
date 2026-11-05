@@ -2404,4 +2404,14 @@ void Play_Init(GameState* thisx) {
     gSaveContext.respawnFlag = 0;
     sBombersNotebookOpen = false;
     BombersNotebook_Init(&sBombersNotebook);
+
+    // S30: ThatHypedPerson's Easier Masks for Majora's Mask: Recompiled (CC0,
+    // https://github.com/ThatHypedPerson/MMRecompEasierMasks; its recomp_after_play_init callback): every form can
+    // put on a normal mask, which turns it back to human, as in Majora's Mask 3D. With its Player_Init hook
+    // (z_player.c).
+    for (s32 form = PLAYER_FORM_FIERCE_DEITY; form <= PLAYER_FORM_DEKU; form++) {
+        for (s32 mask = ITEM_MASK_DEKU; mask <= ITEM_MASK_GIANT; mask++) {
+            gPlayerFormItemRestrictions[form][mask] = true;
+        }
+    }
 }

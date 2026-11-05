@@ -215,6 +215,21 @@ void BgBreakwall_Init(Actor* thisx, PlayState* play) {
     BgBreakwall* this = (BgBreakwall*)thisx;
     BgBreakwallStruct* sp24 = &D_808B8140[BGBREAKWALL_GET_F(&this->dyna.actor)];
 
+    // S30: Seam Fixer (src/s30_seams/s30_seams.h): the Swamp Volcano in Termina Field is the unused cleared one
+    // once Woodfall Temple is cleared, the original one otherwise
+    if (sp24->unk_04 == object_keikoku_obj_DL_0027D8 && CHECK_WEEKEVENTREG(WEEKEVENTREG_CLEARED_WOODFALL_TEMPLE)) {
+        D_808B8140[2].unk_04 = object_keikoku_obj_DL_0044A8;
+        D_808B8140[2].unk_0C = NULL;
+        D_808B8140[2].unk_14 = func_808B736C;
+        D_808B8140[2].unk_18 = func_808B77D0;
+    } else if (sp24->unk_04 == object_keikoku_obj_DL_0044A8 &&
+               !CHECK_WEEKEVENTREG(WEEKEVENTREG_CLEARED_WOODFALL_TEMPLE)) {
+        D_808B8140[2].unk_04 = object_keikoku_obj_DL_0027D8;
+        D_808B8140[2].unk_0C = object_keikoku_obj_Matanimheader_004290;
+        D_808B8140[2].unk_14 = func_808B73FC;
+        D_808B8140[2].unk_18 = func_808B77D0;
+    }
+
     Actor_ProcessInitChain(&this->dyna.actor, sInitChain);
     this->objectSlot = Object_GetSlot(&play->objectCtx, sp24->objectId);
 
