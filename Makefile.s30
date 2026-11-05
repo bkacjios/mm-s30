@@ -35,6 +35,8 @@ CFLAGS := $(TARGET_FLAGS) -O2 -Wall -std=gnu23 -DLINUX -D_LANGUAGE_C -D_GNU_SOUR
     -Iinclude -Iinclude/s30 -I$(N64LIB)/include/s30 -Isrc -I. -Iextracted/$(VERSION) -Ibuild/$(VERSION)
 
 BUILD_DIR := build_s30
+# libultra's OS from the library too (n64/src/os.c)
+N64LIB_OS := 1
 include $(N64LIB)/n64.mk
 
 # The game's C files for this version: the spec's src/ objects that have a
@@ -49,6 +51,12 @@ REPLACED := src/boot/boot_main.c src/boot/build.c src/boot/carthandle.c src/boot
 # game's would replace them for the whole process, Mesa and ALSA included)
 REPLACED += src/libultra/libc/string.c src/boot/libc/memmove.c src/boot/libc/memset.c \
     src/boot/libc/strcmp.c src/boot/libc/strcpy.c src/boot/libc64/sprintf.c
+# libultra's OS is the shared library's (n64/src/os.c): its os/ and io/
+# files aren't built (the VI mode tables, in vimodes/, are)
+REPLACED += src/libultra/os/% src/libultra/io/%
+# The Voice Recognition Unit's driver (os.c: none plugged in), and the flash
+# driver: saves go to a file (src/code/sys_flashrom.c)
+REPLACED += src/libultra/voice/% src/code/osFlash.c
 SRCS := $(filter-out src/makerom/% $(REPLACED),$(wildcard $(addsuffix .c,$(SPEC_O))))
 OBJS := $(patsubst src/%.c,$(BUILD_DIR)/src/%.o,$(SRCS))
 # The map overhaul (src/s30_map/s30_map.h), game code like the rest
