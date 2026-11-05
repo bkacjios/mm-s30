@@ -597,7 +597,7 @@ void KaleidoScope_UpdateMaskCursor(PlayState* play) {
 // The C buttons moved on the HUD (z_parameter.c): same screen-to-page mapping
 // as the N64 values (centre x: 660 + 10.9 per pixel from 240.5, centre y:
 // 1100 - 11.25 per pixel from 31.5); C-right is the shoulder pill's icon
-s16 sMaskCButtonPosX[] = { 856, 1096, 1265, 1396, 1396, 1221, 1570 }; // then the D-pad items (z_kaleido_item.c)
+s16 sMaskCButtonPosX[] = { 856, 616, 1265, 1396, 1396, 1221, 1570 }; // then the D-pad items (z_kaleido_item.c)
 s16 sMaskCButtonPosY[] = { 1280, 1044, 1308, 937, 577, 757, 757 };
 #else
 s16 sMaskCButtonPosX[] = { 660, 900, 1140 };
